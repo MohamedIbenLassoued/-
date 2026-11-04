@@ -74,18 +74,25 @@ const LEGACY_VIOLATIONS = ['مخالفة رعي (البند ١)', 'مخالفة 
 
 const STATUS = {
   draft: { label: 'مسودة', cls: 'b-draft' },
-  submitted: { label: 'قيد المراجعة', cls: 'b-review' },
-  resubmitted: { label: 'أعيد تسليمه للمراجعة', cls: 'b-review2' },
-  returned: { label: 'معاد للتعديل', cls: 'b-returned' },
+  submitted: { label: 'بانتظار مراجعة الإدارة', cls: 'b-review' },
+  resubmitted: { label: 'أعيد تسليمه للإدارة', cls: 'b-review2' },
+  returned: { label: 'معاد للمفتش للتعديل', cls: 'b-returned' },
+  forwarded: { label: 'بانتظار اعتماد المدير', cls: 'b-director' },
+  director_returned: { label: 'أعاده المدير للإدارة', cls: 'b-returned' },
   approved: { label: 'معتمد', cls: 'b-approved' }
 };
-const PENDING = ['submitted', 'resubmitted'];
+/* Workflow: inspector submits → الإدارة reviews (forward / return to inspector) → المدير approves (or returns to الإدارة). */
+const ADMIN_PENDING = ['submitted', 'resubmitted', 'director_returned'];
+const DIRECTOR_PENDING = ['forwarded'];
+const PENDING = ADMIN_PENDING.concat(DIRECTOR_PENDING); // under review: locked for the inspector
 const EDITABLE = ['draft', 'returned'];
 const ACTIONS = {
   created: 'إنشاء مسودة المحضر',
   submitted: 'تسليم المحضر للمراجعة',
   resubmitted: 'إعادة التسليم بعد التعديل',
   returned: 'إرجاع المحضر للمفتش للتعديل',
+  forwarded: 'مراجعة الإدارة وتحويل المحضر إلى المدير',
+  director_returned: 'إعادة المحضر من المدير إلى الإدارة',
   approved: 'اعتماد المحضر'
 };
 const SIGNATURE = { unspecified: 'لم يحدد', signed: 'وقّع', refused: 'رفض التوقيع' };
@@ -295,15 +302,22 @@ const NAV = {
   ],
   admin: [
     { h: '#admin', k: 'adash', label: 'لوحة الإدارة', icon: 'grid' },
-    { h: '#admin-inbox', k: 'inbox', label: 'صندوق المحاضر', icon: 'inbox' }
+    { h: '#admin-inbox', k: 'inbox', label: 'المحاضر', icon: 'inbox' }
+  ],
+  director: [
+    { h: '#director', k: 'ddash', label: 'لوحة المدير', icon: 'shield' },
+    { h: '#director-inbox', k: 'dinbox', label: 'المحاضر', icon: 'inbox' }
   ]
 };
-const SWITCH = {
-  inspector: { h: '#admin', k: 'admin', label: 'الإدارة', long: 'بوابة الإدارة', icon: 'shield' },
-  admin: { h: '#home', k: 'home-switch', label: 'بوابة المفتش', long: 'بوابة المفتش', icon: 'user' }
+const PORTALS = {
+  inspector: { h: '#home', k: 'sw-inspector', label: 'المفتش', long: 'بوابة المفتش', icon: 'user' },
+  admin: { h: '#admin', k: 'sw-admin', label: 'الإدارة', long: 'بوابة الإدارة', icon: 'grid' },
+  director: { h: '#director', k: 'sw-director', label: 'المدير', long: 'بوابة المدير', icon: 'shield' }
 };
+const SWITCH = { inspector: ['admin', 'director'], admin: ['director', 'inspector'], director: ['admin', 'inspector'] };
 function navKey(p) {
   if (p[0] === 'admin') return p[1] === 'inbox' || p[1] === 'review' ? 'inbox' : 'adash';
+  if (p[0] === 'director') return p[1] === 'inbox' || p[1] === 'review' ? 'dinbox' : 'ddash';
   if (p[0] === 'reports' || p[0] === 'view') return 'reports';
   if (p[0] === 'new' || p[0] === 'edit') return 'new';
   return 'home';
@@ -312,13 +326,13 @@ function renderShell(portal, p) {
   const key = navKey(p);
   const cur = it => it.k === key ? ' aria-current="page"' : '';
   document.body.dataset.portal = portal;
-  $('#portalPill').innerHTML = '<span class="hide-xs">بوابة </span>' + (portal === 'admin' ? 'الإدارة' : 'المفتش');
-  $('#portalPill').setAttribute('aria-label', portal === 'admin' ? 'البوابة الحالية: بوابة الإدارة' : 'البوابة الحالية: بوابة المفتش');
-  $('#sidePortalLabel').textContent = portal === 'admin' ? 'بوابة الإدارة' : 'بوابة المفتش';
+  $('#portalPill').innerHTML = '<span class="hide-xs">بوابة </span>' + PORTALS[portal].label;
+  $('#portalPill').setAttribute('aria-label', 'البوابة الحالية: ' + PORTALS[portal].long);
+  $('#sidePortalLabel').textContent = PORTALS[portal].long;
   $('#sideNav').innerHTML = NAV[portal].map(it => '<a href="' + it.h + '"' + cur(it) + '>' + icon(it.icon) + '<span>' + it.label + '</span></a>').join('');
-  const sw = SWITCH[portal];
-  $('#sideSwitch').innerHTML = '<a href="' + sw.h + '">' + icon(sw.icon) + '<span>' + sw.long + '</span></a>';
-  const bn = NAV[portal].concat([sw]);
+  const sw = SWITCH[portal].map(k => PORTALS[k]);
+  $('#sideSwitch').innerHTML = sw.map(x => '<a href="' + x.h + '">' + icon(x.icon) + '<span>' + x.long + '</span></a>').join('');
+  const bn = NAV[portal].concat(sw);
   $('#bottomnav').innerHTML = bn.map(it => '<a href="' + it.h + '"' + cur(it) + (it.accent ? ' class="accent"' : '') + '><span class="bn-icon">' + icon(it.icon) + '</span><span>' + it.label + '</span></a>').join('');
 }
 function openDrawer() {
@@ -394,7 +408,7 @@ function parseRoute() {
   let h = location.hash.replace(/^#/, '');
   try { h = decodeURIComponent(h); } catch (e) { /* keep raw */ }
   if (h.charAt(0) === '/') return h.split('/').filter(Boolean);
-  const m = h.match(/^(admin-review|admin-inbox|reports|edit|view)-(.+)$/);
+  const m = h.match(/^(admin-review|admin-inbox|director-review|director-inbox|reports|edit|view)-(.+)$/);
   if (m) return m[1].split('-').concat([m[2]]);
   return h ? h.split('-') : [];
 }
@@ -402,7 +416,7 @@ function render() {
   leaveWizard();
   closeDrawer();
   const p = parseRoute();
-  const portal = p[0] === 'admin' ? 'admin' : 'inspector';
+  const portal = p[0] === 'admin' || p[0] === 'director' ? p[0] : 'inspector';
   renderShell(portal, p);
   const view = $('#view');
   let title;
@@ -410,6 +424,10 @@ function render() {
     if (p[1] === 'inbox') title = renderAdminInbox(view, p[2]);
     else if (p[1] === 'review' && p[2]) title = renderAdminReview(view, p[2]);
     else title = renderAdminHome(view);
+  } else if (portal === 'director') {
+    if (p[1] === 'inbox') title = renderRoleInbox(view, p[2], 'director');
+    else if (p[1] === 'review' && p[2]) title = renderRoleReview(view, p[2], 'director');
+    else title = renderDirectorHome(view);
   } else if (p[0] === 'reports') title = renderReports(view, p[1]);
   else if (p[0] === 'new') title = renderWizard(view, null);
   else if (p[0] === 'edit' && p[1]) title = renderWizard(view, p[1]);
@@ -435,10 +453,12 @@ function latestReturn(c) { return c.returnComments.length ? c.returnComments[c.r
 
 function reportCard(c, mode) {
   const ret = c.status === 'returned' ? latestReturn(c) : null;
-  const cls = c.status === 'returned' ? ' is-returned' : c.status === 'draft' ? ' is-draft' : '';
+  const dret = mode && c.status === 'director_returned' ? c.history.slice().reverse().find(h => h.action === 'director_returned') : null;
+  const cls = c.status === 'returned' || dret ? ' is-returned' : c.status === 'draft' ? ' is-draft' : '';
   let actions;
-  if (mode === 'admin') {
-    actions = '<a class="btn ' + (PENDING.includes(c.status) ? 'primary' : 'secondary') + ' block" href="#admin-review-' + enc(c.id) + '">' + icon('eye') + (PENDING.includes(c.status) ? 'فتح للمراجعة' : 'عرض المحضر') + '</a>';
+  if (mode === 'admin' || mode === 'director') {
+    const pend = (mode === 'admin' ? ADMIN_PENDING : DIRECTOR_PENDING).includes(c.status);
+    actions = '<a class="btn ' + (pend ? 'primary' : 'secondary') + ' block" href="#' + mode + '-review-' + enc(c.id) + '">' + icon('eye') + (pend ? (mode === 'admin' ? 'فتح للمراجعة' : 'فتح للاعتماد') : 'عرض المحضر') + '</a>';
   } else if (c.status === 'draft') {
     actions = '<a class="btn primary" href="#edit-' + enc(c.id) + '">' + icon('edit') + 'متابعة التحرير</a><button class="btn danger-outline" type="button" data-action="delete-draft" data-id="' + esc(c.id) + '">' + icon('trash') + 'حذف</button>';
   } else if (c.status === 'returned') {
@@ -452,10 +472,11 @@ function reportCard(c, mode) {
     '<div class="rmeta">' +
       '<span>' + icon('pin') + '<span class="txt">' + locText(c) + '</span></span>' +
       '<span>' + icon('calendar') + '<span class="txt">' + fmtDate(c.date) + (c.time ? ' · ' + esc(fmtTime12(c.time)) : '') + '</span></span>' +
-      (mode === 'admin' ? '<span>' + icon('user') + '<span class="txt">' + (c.person ? esc(c.person) : 'لم يحدد المخالف') + '</span></span>' : '') +
+      (mode ? '<span>' + icon('user') + '<span class="txt">' + (c.person ? esc(c.person) : 'لم يحدد المخالف') + '</span></span>' : '') +
       '<span>' + icon('scale') + '<span class="txt">' + (vcount ? (vcount === 1 ? 'مخالفة واحدة' : vcount + ' مخالفات') + (c.violationNos.length ? ' (البند ' + c.violationNos.join('، ') + ')' : '') : 'لم تحدد المخالفات') + '</span></span>' +
     '</div>' +
     (ret ? '<div class="return-note"><b>ملاحظة الإدارة عند الإرجاع</b>' + esc(ret.text) + '</div>' : '') +
+    (dret && dret.note ? '<div class="return-note"><b>ملاحظة المدير عند الإعادة</b>' + esc(dret.note) + '</div>' : '') +
     '<div class="btn-row">' + actions + '</div>' +
   '</article>';
 }
@@ -549,7 +570,11 @@ function sampleCases() {
     Object.assign({}, base, { id: 'MECC-DEMO-0000004', status: 'approved', date: day(6), time: '10:40', place: 'مثال: مزرعة جنوب الخور', lat: 25.6, lng: 51.48, accuracy: 20, locSource: 'map',
       violationNos: [15], notes: 'مثال تجريبي: نقل أتربة من أرض زراعية.', person: 'مخالف تجريبي آخر (مثال)', qid: '00000000001',
       createdAt: iso(6, 10), updatedAt: iso(4, 12), submittedAt: iso(6, 12), reviewedAt: iso(4, 12), managerNote: 'تمت المراجعة.',
-      returnComments: [], history: [{ action: 'created', at: iso(6, 10), by: 'مفتش تجريبي' }, { action: 'submitted', at: iso(6, 12), by: 'مفتش تجريبي' }, { action: 'approved', at: iso(4, 12), by: 'الإدارة', note: 'تمت المراجعة.' }] })
+      returnComments: [], history: [{ action: 'created', at: iso(6, 10), by: 'مفتش تجريبي' }, { action: 'submitted', at: iso(6, 12), by: 'مفتش تجريبي' }, { action: 'forwarded', at: iso(5, 9), by: 'الإدارة', note: 'تمت المراجعة.' }, { action: 'approved', at: iso(4, 12), by: 'المدير', note: '' }] }),
+    Object.assign({}, base, { id: 'MECC-DEMO-0000005', status: 'forwarded', date: day(2), time: '09:10', place: 'مثال: روضة جنوب الشمال', lat: 25.7, lng: 51.3, accuracy: 11, locSource: 'gps',
+      violationNos: [6], notes: 'مثال تجريبي: قطع أشجار برية بدون ترخيص.', person: 'مخالف تجريبي رابع (مثال)', qid: '00000000003',
+      createdAt: iso(2, 9), updatedAt: iso(1, 11), submittedAt: iso(2, 10),
+      returnComments: [], history: [{ action: 'created', at: iso(2, 9), by: 'مفتش تجريبي' }, { action: 'submitted', at: iso(2, 10), by: 'مفتش تجريبي' }, { action: 'forwarded', at: iso(1, 11), by: 'الإدارة', note: 'البيانات مكتملة، مرفوع للاعتماد.' }] })
   ].map(c => Object.assign(c, { violations: c.violationNos.map(n => VBY[n].text) }));
 }
 function loadSamples() {
@@ -653,7 +678,7 @@ function renderInspectorView(view, id) {
   let banner = '';
   if (c.status === 'returned') banner = '<div class="msg warn" style="margin-bottom:14px">' + icon('alert') + '<div><strong>أعادت الإدارة هذا المحضر للتعديل</strong>' + esc(ret ? ret.text : '') + '<div style="margin-top:10px"><a class="btn primary" href="#edit-' + enc(c.id) + '">' + icon('edit') + 'فتح وتعديل ثم إعادة التسليم</a></div></div></div>';
   else if (c.status === 'approved') banner = '<div class="msg ok" style="margin-bottom:14px">' + icon('check') + '<div><strong>محضر معتمد — للقراءة فقط</strong>لا يمكن تعديل المحضر بعد اعتماده. يمكنك تنزيل المحضر الرسمي بصيغة PDF من الزر أعلاه.</div></div>';
-  else if (PENDING.includes(c.status)) banner = '<div class="msg info" style="margin-bottom:14px">' + icon('info') + '<div><strong>المحضر قيد المراجعة</strong>لا يمكن التعديل أثناء المراجعة. سيظهر هنا أي إرجاع أو اعتماد. (المراجعة تجريبية على هذا الجهاز ولم يُرسل المحضر إلى الوزارة.)</div></div>';
+  else if (PENDING.includes(c.status)) banner = '<div class="msg info" style="margin-bottom:14px">' + icon('info') + '<div><strong>' + (c.status === 'forwarded' ? 'راجعته الإدارة وحوّلته إلى المدير للاعتماد' : 'المحضر قيد مراجعة الإدارة') + '</strong>لا يمكن التعديل أثناء المراجعة. سيظهر هنا أي إرجاع أو اعتماد. (المراجعة تجريبية على هذا الجهاز ولم يُرسل المحضر إلى الوزارة.)</div></div>';
   else if (c.status === 'draft') banner = '<div class="msg info" style="margin-bottom:14px">' + icon('device') + '<div><strong>مسودة محفوظة محلياً</strong><a class="btn primary" style="margin-top:8px" href="#edit-' + enc(c.id) + '">متابعة التحرير</a></div></div>';
   view.innerHTML =
     '<div class="page-head"><div><a class="back-link" href="#reports">' + icon('prev') + 'العودة إلى تقاريري</a><h1>محضر ' + ltr(c.id) + '</h1></div>' +
@@ -800,7 +825,7 @@ function wizardHTML(rec) {
       '</div></details>' +
     '</div>' +
     '<div class="card" id="evCard">' +
-      '<div class="card-head"><h3 id="evH">الأدلة والصور</h3><span class="counter" id="photoCount">0 / ' + MAX_PHOTOS + '</span></div>' +
+      '<div class="card-head"><h3 id="evH">الأدلة والصور <span class="req">*</span></h3><span class="counter" id="photoCount">0 / ' + MAX_PHOTOS + '</span></div>' +
       '<p class="hint" style="margin:-4px 0 12px">حتى ' + MAX_PHOTOS + ' صور، بحد أقصى 10 م.ب للصورة الواحدة. الصيغ المقبولة: JPG وPNG وWEBP. تُحفظ نسخة عرض مصغّرة فقط.</p>' +
       '<div class="photo-actions">' +
         '<button class="btn primary lg" type="button" data-action="pick" data-target="camInput" id="camBtn">' + icon('camera', 'ic-lg') + 'التقاط صورة</button>' +
@@ -1364,6 +1389,7 @@ async function addPhotos(fileList) {
   $('#photoMsg').innerHTML = errors.length ? '<div class="msg bad" style="margin-top:12px">' + icon('alert') + '<div><strong>تعذر إضافة بعض الملفات</strong><ul>' + errors.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul></div></div>'
     : added ? '<p class="sr-only">تمت إضافة ' + added + ' صورة.</p>' : '';
   if (added) {
+    refreshValidation();
     if (!saveNow()) {
       $('#photoMsg').insertAdjacentHTML('beforeend', '<div class="msg bad" style="margin-top:12px">' + icon('alert') + '<div>تعذر حفظ الصور محلياً بسبب امتلاء مساحة التخزين. احذف بعض الصور أو المسودات القديمة.</div></div>');
     }
@@ -1413,6 +1439,7 @@ function validateStep(s) {
     if (needsChips() && !d.chips.some(x => String(x).trim())) e.push({ f: 'chip0', m: 'أدخل رقم شريحة إبل واحداً على الأقل لمخالفات الرعي (البنود 1–4).' });
     d.chips.forEach((x, i) => { if (String(x).trim() && !/^[0-9A-Za-z\- ]{3,30}$/.test(latinDigits(x).trim())) e.push({ f: 'chip' + i, m: 'رقم الشريحة ' + (i + 1) + ' يحتوي على رموز غير صالحة.' }); });
     if (W.busy) e.push({ f: 'camBtn', m: 'انتظر حتى ينتهي تجهيز الصور.' });
+    else if (!d.photos.length) e.push({ f: 'camBtn', m: 'أرفق صورة واحدة على الأقل للمخالفة (التقاط صورة أو اختيار من الجهاز).' });
   }
   if (s === 3) {
     if (!d.person.trim()) e.push({ f: 'f-person', m: 'أدخل اسم المخالف.' });
@@ -1522,123 +1549,203 @@ async function submitWizard() {
 /* ------------------------------------------------------------------ *
  * Administration
  * ------------------------------------------------------------------ */
-function adminList() { return readCases().filter(c => c.status !== 'draft'); }
-function adminTable(list) {
+/* Reviewer roles: الإدارة reviews and forwards; المدير approves. */
+const ROLES = {
+  admin: { name: 'الإدارة', portal: 'بوابة الإدارة', home: 'لوحة الإدارة', inbox: 'صندوق المحاضر', pending: ADMIN_PENDING, prefix: 'admin' },
+  director: { name: 'المدير', portal: 'بوابة المدير', home: 'لوحة المدير', inbox: 'محاضر المدير', pending: DIRECTOR_PENDING, prefix: 'director' }
+};
+function lastAction(c, action) { return c.history.slice().reverse().find(h => h.action === action) || null; }
+function roleList(role) {
+  const all = readCases().filter(c => c.status !== 'draft');
+  if (role === 'director') return all.filter(c => ['forwarded', 'approved', 'director_returned'].includes(c.status) || c.history.some(h => h.action === 'forwarded'));
+  return all;
+}
+function adminTable(list, role) {
+  const R = ROLES[role];
   return '<div class="table-wrap"><table class="rows"><caption class="sr-only">قائمة المحاضر</caption><thead><tr>' +
     '<th scope="col">رقم المحضر</th><th scope="col">تاريخ الضبط</th><th scope="col">الموقع</th><th scope="col">المخالف</th><th scope="col">المخالفات</th><th scope="col">الحالة</th><th scope="col"><span class="sr-only">إجراء</span></th></tr></thead><tbody>' +
-    list.map(c => '<tr' + (c.status === 'returned' ? ' class="is-returned"' : '') + '><td>' + ltr(c.id) + '</td><td>' + fmtDate(c.date) + '</td><td>' + locText(c) + '</td><td>' + esc(c.person || '—') + '</td><td>' + (c.violationNos.length ? ltr(c.violationNos.join(', ')) : '—') + '</td><td>' + badge(c.status) + '</td>' +
-      '<td><a class="btn ' + (PENDING.includes(c.status) ? 'primary' : 'secondary') + ' sm" href="#admin-review-' + enc(c.id) + '">' + (PENDING.includes(c.status) ? 'مراجعة' : 'عرض') + '</a></td></tr>').join('') +
+    list.map(c => {
+      const pend = R.pending.includes(c.status);
+      return '<tr' + (c.status === 'returned' || c.status === 'director_returned' ? ' class="is-returned"' : '') + '><td>' + ltr(c.id) + '</td><td>' + fmtDate(c.date) + '</td><td>' + locText(c) + '</td><td>' + esc(c.person || '—') + '</td><td>' + (c.violationNos.length ? ltr(c.violationNos.join(', ')) : '—') + '</td><td>' + badge(c.status) + '</td>' +
+        '<td><a class="btn ' + (pend ? 'primary' : 'secondary') + ' sm" href="#' + R.prefix + '-review-' + enc(c.id) + '">' + (pend ? (role === 'admin' ? 'مراجعة' : 'اعتماد') : 'عرض') + '</a></td></tr>';
+    }).join('') +
     '</tbody></table></div>';
 }
-function adminCollection(list, emptyText) {
+function adminCollection(list, emptyText, role) {
   if (!list.length) return emptyState(emptyText);
-  return adminTable(list) + '<div class="cards grid-2 mobile-only">' + list.map(c => reportCard(c, 'admin')).join('') + '</div>';
+  return adminTable(list, role) + '<div class="cards grid-2 mobile-only">' + list.map(c => reportCard(c, role)).join('') + '</div>';
 }
+const byQueueTime = (a, b) => String(a.updatedAt || a.createdAt || '').localeCompare(String(b.updatedAt || b.createdAt || ''));
 function renderAdminHome(view) {
-  const list = sortRecent(adminList());
-  const pending = list.filter(c => PENDING.includes(c.status)).sort((a, b) => String(a.submittedAt || a.createdAt || '').localeCompare(String(b.submittedAt || b.createdAt || '')));
-  const n = s => list.filter(c => c.status === s).length;
+  const list = sortRecent(roleList('admin'));
+  const pending = list.filter(c => ADMIN_PENDING.includes(c.status)).sort(byQueueTime);
+  const n = (...s) => list.filter(c => s.includes(c.status)).length;
   view.innerHTML =
-    '<div class="page-head"><div><p class="eyebrow">بوابة الإدارة</p><h1>لوحة الإدارة</h1><p class="lead">مراجعة المحاضر المسلّمة واعتمادها أو إرجاعها للمفتش.</p></div></div>' +
+    '<div class="page-head"><div><p class="eyebrow">بوابة الإدارة</p><h1>لوحة الإدارة</h1><p class="lead">مراجعة المحاضر المسلّمة من المفتشين، ثم تحويلها إلى المدير للاعتماد أو إرجاعها للمفتش.</p></div></div>' +
     '<div class="stats four" role="list">' +
-      '<a role="listitem" class="stat st-review" href="#admin-inbox-submitted"><span class="stat-label">بانتظار المراجعة</span><strong>' + n('submitted') + '</strong></a>' +
-      '<a role="listitem" class="stat st-review2" href="#admin-inbox-resubmitted"><span class="stat-label">أعيد تسليمها</span><strong>' + n('resubmitted') + '</strong></a>' +
+      '<a role="listitem" class="stat st-review" href="#admin-inbox-pending"><span class="stat-label">بانتظار مراجعتك</span><strong>' + n('submitted', 'resubmitted', 'director_returned') + '</strong></a>' +
+      '<a role="listitem" class="stat st-review2" href="#admin-inbox-forwarded"><span class="stat-label">لدى المدير</span><strong>' + n('forwarded') + '</strong></a>' +
       '<a role="listitem" class="stat st-action" href="#admin-inbox-returned"><span class="stat-label">معادة للمفتش</span><strong>' + n('returned') + '</strong></a>' +
       '<a role="listitem" class="stat st-ok" href="#admin-inbox-approved"><span class="stat-label">معتمدة</span><strong>' + n('approved') + '</strong></a>' +
     '</div>' +
-    '<div class="sec-head"><h2>تحتاج قراراً (' + pending.length + ')</h2><a href="#admin-inbox">صندوق المحاضر</a></div>' +
-    (pending.length ? adminCollection(pending, '') : emptyState('لا توجد محاضر بانتظار المراجعة حالياً.', list.length ? '' : sampleBtn())) +
+    '<div class="sec-head"><h2>بانتظار مراجعتك (' + pending.length + ')</h2><a href="#admin-inbox">صندوق المحاضر</a></div>' +
+    (pending.length ? adminCollection(pending, '', 'admin') : emptyState('لا توجد محاضر بانتظار المراجعة حالياً.', list.length ? '' : sampleBtn())) +
     samplesNote() +
     '<div class="legal-note" style="margin-top:16px">' + icon('info') + '<span>' + LEGAL_NOTE + '</span></div>';
   return 'لوحة الإدارة';
 }
-const A_FILTERS = [
-  ['all', 'الكل', () => true],
-  ['pending', 'تحتاج قراراً', c => PENDING.includes(c.status)],
-  ['submitted', 'بانتظار المراجعة', c => c.status === 'submitted'],
-  ['resubmitted', 'أعيد تسليمها', c => c.status === 'resubmitted'],
-  ['returned', 'معادة', c => c.status === 'returned'],
-  ['approved', 'معتمدة', c => c.status === 'approved']
-];
-function renderAdminInbox(view, f) {
-  const filt = A_FILTERS.find(x => x[0] === f) || A_FILTERS[0];
-  const all = adminList();
+function renderDirectorHome(view) {
+  const list = sortRecent(roleList('director'));
+  const pending = list.filter(c => c.status === 'forwarded').sort(byQueueTime);
+  const n = s => list.filter(c => c.status === s).length;
   view.innerHTML =
-    '<div class="page-head"><div><p class="eyebrow">بوابة الإدارة</p><h1>صندوق المحاضر</h1></div></div>' +
-    '<nav class="filters" aria-label="تصفية حسب الحالة">' + A_FILTERS.map(x =>
-      '<a href="#admin-inbox-' + x[0] + '"' + (x === filt ? ' aria-current="true"' : '') + '>' + x[1] + ' <span class="count">(' + all.filter(x[2]).length + ')</span></a>').join('') + '</nav>' +
+    '<div class="page-head"><div><p class="eyebrow">بوابة المدير</p><h1>لوحة المدير</h1><p class="lead">اعتماد المحاضر التي راجعتها الإدارة وحوّلتها إليك، أو إعادتها إلى الإدارة.</p></div></div>' +
+    '<div class="stats" role="list">' +
+      '<a role="listitem" class="stat st-review2" href="#director-inbox-pending"><span class="stat-label">بانتظار اعتمادك</span><strong>' + n('forwarded') + '</strong></a>' +
+      '<a role="listitem" class="stat st-ok" href="#director-inbox-approved"><span class="stat-label">معتمدة</span><strong>' + n('approved') + '</strong></a>' +
+      '<a role="listitem" class="stat st-action" href="#director-inbox-director_returned"><span class="stat-label">أعيدت للإدارة</span><strong>' + n('director_returned') + '</strong></a>' +
+    '</div>' +
+    '<div class="sec-head"><h2>بانتظار اعتمادك (' + pending.length + ')</h2><a href="#director-inbox">كل المحاضر</a></div>' +
+    (pending.length ? adminCollection(pending, '', 'director') : emptyState('لا توجد محاضر بانتظار الاعتماد حالياً.')) +
+    '<div class="legal-note" style="margin-top:16px">' + icon('info') + '<span>' + LEGAL_NOTE + '</span></div>';
+  return 'لوحة المدير';
+}
+const FILTERS = {
+  admin: [
+    ['all', 'الكل', () => true],
+    ['pending', 'بانتظار مراجعتك', c => ADMIN_PENDING.includes(c.status)],
+    ['forwarded', 'لدى المدير', c => c.status === 'forwarded'],
+    ['director_returned', 'أعادها المدير', c => c.status === 'director_returned'],
+    ['returned', 'معادة للمفتش', c => c.status === 'returned'],
+    ['approved', 'معتمدة', c => c.status === 'approved']
+  ],
+  director: [
+    ['all', 'الكل', () => true],
+    ['pending', 'بانتظار اعتمادك', c => c.status === 'forwarded'],
+    ['approved', 'معتمدة', c => c.status === 'approved'],
+    ['director_returned', 'أعيدت للإدارة', c => c.status === 'director_returned']
+  ]
+};
+function renderRoleInbox(view, f, role) {
+  const R = ROLES[role];
+  const list = FILTERS[role];
+  const filt = list.find(x => x[0] === f) || list[0];
+  const all = roleList(role);
+  view.innerHTML =
+    '<div class="page-head"><div><p class="eyebrow">' + R.portal + '</p><h1>' + R.inbox + '</h1></div></div>' +
+    '<nav class="filters" aria-label="تصفية حسب الحالة">' + list.map(x =>
+      '<a href="#' + R.prefix + '-inbox-' + x[0] + '"' + (x === filt ? ' aria-current="true"' : '') + '>' + x[1] + ' <span class="count">(' + all.filter(x[2]).length + ')</span></a>').join('') + '</nav>' +
     '<div class="search"><label class="sr-only" for="q">بحث في المحاضر</label>' + icon('search') + '<input id="q" type="search" data-search="admin" placeholder="بحث برقم المحضر أو الموقع أو المخالف" autocomplete="off"></div>' +
     '<div id="reportList" aria-live="polite"></div>';
   view.dataset.filter = filt[0];
+  view.dataset.role = role;
   fillAdminList();
-  return 'صندوق المحاضر';
+  return R.inbox;
 }
+function renderAdminInbox(view, f) { return renderRoleInbox(view, f, 'admin'); }
 function fillAdminList() {
-  const filt = A_FILTERS.find(x => x[0] === $('#view').dataset.filter) || A_FILTERS[0];
+  const role = $('#view').dataset.role || 'admin';
+  const list = FILTERS[role];
+  const filt = list.find(x => x[0] === $('#view').dataset.filter) || list[0];
   const q = (($('#q') || {}).value || '').trim();
-  $('#reportList').innerHTML = adminCollection(sortRecent(adminList()).filter(filt[2]).filter(c => matchQuery(c, q)), q ? 'لا توجد نتائج مطابقة للبحث.' : 'لا توجد محاضر في هذه القائمة.');
+  $('#reportList').innerHTML = adminCollection(sortRecent(roleList(role)).filter(filt[2]).filter(c => matchQuery(c, q)), q ? 'لا توجد نتائج مطابقة للبحث.' : 'لا توجد محاضر في هذه القائمة.', role);
 }
-function renderAdminReview(view, id) {
+function noteMsg(kind, title, h) {
+  return h && h.note ? '<div class="msg ' + kind + '" style="margin-bottom:12px">' + icon(kind === 'warn' ? 'alert' : 'info') + '<div><strong>' + title + '</strong>' + esc(h.note) + '<div class="hint" style="color:inherit">' + fmtDateTime(h.at) + '</div></div></div>' : '';
+}
+function decisionField(label, hint) {
+  return '<div class="field"><label for="decNote">' + label + '</label><textarea id="decNote" rows="4" aria-describedby="decHint decErr"></textarea>' +
+    '<p class="hint" id="decHint">' + hint + '</p><p class="field-error" id="decErr" role="alert"></p></div>';
+}
+function approvedPanel(c) {
+  const h = lastAction(c, 'approved');
+  return '<div class="msg ok">' + icon('check') + '<div><strong>تم اعتماد المحضر' + (h && h.by ? ' — ' + esc(h.by) : '') + '</strong>' + fmtDateTime(h ? h.at : c.reviewedAt) + '<br>المحضر للقراءة فقط ولا يمكن تعديله.</div></div>' +
+    '<div class="btn-row" style="margin-top:12px"><button class="btn primary block" type="button" data-action="official-pdf" data-id="' + esc(c.id) + '">' + icon('print') + 'تنزيل المحضر الرسمي (PDF)</button></div>' +
+    '<p class="hint">ملف بصيغة نموذج WPD/01: الصفحة الأولى للمحضر، تليها صفحات الأدلة المصورة.</p>';
+}
+function renderAdminReview(view, id) { return renderRoleReview(view, id, 'admin'); }
+function renderRoleReview(view, id, role) {
+  const R = ROLES[role];
   const c = getCase(id);
-  if (!c || c.status === 'draft') { view.innerHTML = notFound('#admin-inbox'); return 'غير موجود'; }
+  if (!c || c.status === 'draft' || (role === 'director' && !roleList('director').some(x => x.id === id))) { view.innerHTML = notFound('#' + R.prefix + '-inbox'); return 'غير موجود'; }
   const s = detailSections(c, { admin: true });
   let decision;
-  if (PENDING.includes(c.status)) {
+  if (c.status === 'approved') decision = approvedPanel(c);
+  else if (role === 'admin' && ADMIN_PENDING.includes(c.status)) {
     decision =
-      '<p class="muted" style="margin-bottom:12px">راجع بيانات المحضر والأدلة وسجل الإجراءات قبل اتخاذ القرار.</p>' +
+      noteMsg('warn', 'ملاحظة المدير عند الإعادة', c.status === 'director_returned' ? lastAction(c, 'director_returned') : null) +
       (c.status === 'resubmitted' ? '<div class="msg info" style="margin-bottom:12px">' + icon('info') + '<div>أعاد المفتش تسليم هذا المحضر بعد التعديل. راجع ملاحظات الإرجاع السابقة.</div></div>' : '') +
-      '<div class="field"><label for="decNote">ملاحظة الإدارة</label><textarea id="decNote" rows="4" aria-describedby="decHint decErr"></textarea>' +
-      '<p class="hint" id="decHint">إلزامية عند إرجاع المحضر للمفتش، واختيارية عند الاعتماد. تُحفظ ضمن سجل الإجراءات.</p><p class="field-error" id="decErr" role="alert"></p></div>' +
-      '<div class="btn-row"><button class="btn success lg" type="button" data-action="approve" data-id="' + esc(c.id) + '">' + icon('check') + 'اعتماد المحضر</button>' +
+      '<p class="muted" style="margin-bottom:12px">راجع بيانات المحضر والأدلة، ثم حوّله إلى المدير للاعتماد أو أعده للمفتش.</p>' +
+      decisionField('ملاحظة المراجعة', 'إلزامية عند الإرجاع للمفتش، واختيارية عند التحويل (تظهر للمدير). تُحفظ ضمن سجل الإجراءات.') +
+      '<div class="btn-row"><button class="btn primary lg" type="button" data-action="forward" data-id="' + esc(c.id) + '">' + icon('next') + 'تحويل إلى المدير</button>' +
       '<button class="btn danger-outline lg" type="button" data-action="return" data-id="' + esc(c.id) + '">' + icon('prev') + 'إرجاع للمفتش</button></div>';
-  } else if (c.status === 'approved') {
-    const h = c.history.slice().reverse().find(x => x.action === 'approved');
-    decision = '<div class="msg ok">' + icon('check') + '<div><strong>تم اعتماد المحضر</strong>' + fmtDateTime(h ? h.at : c.reviewedAt) + '<br>المحضر للقراءة فقط ولا يمكن تعديله.</div></div>' +
-      '<div class="btn-row" style="margin-top:12px"><button class="btn primary block" type="button" data-action="official-pdf" data-id="' + esc(c.id) + '">' + icon('print') + 'تنزيل المحضر الرسمي (PDF)</button></div>' +
-      '<p class="hint">ملف بصيغة نموذج WPD/01: الصفحة الأولى للمحضر، تليها صفحات الأدلة المصورة.</p>';
+  } else if (role === 'director' && c.status === 'forwarded') {
+    decision =
+      noteMsg('info', 'ملاحظة الإدارة عند التحويل', lastAction(c, 'forwarded')) +
+      '<p class="muted" style="margin-bottom:12px">راجعت الإدارة هذا المحضر وحوّلته إليك للاعتماد.</p>' +
+      decisionField('ملاحظة المدير', 'إلزامية عند الإعادة إلى الإدارة، واختيارية عند الاعتماد.') +
+      '<div class="btn-row"><button class="btn success lg" type="button" data-action="approve" data-id="' + esc(c.id) + '">' + icon('check') + 'اعتماد المحضر</button>' +
+      '<button class="btn danger-outline lg" type="button" data-action="director-return" data-id="' + esc(c.id) + '">' + icon('prev') + 'إعادة إلى الإدارة</button></div>';
+  } else if (c.status === 'forwarded') {
+    decision = '<div class="msg info">' + icon('info') + '<div><strong>محال إلى المدير</strong>تمت المراجعة وتحويل المحضر إلى المدير، وهو بانتظار الاعتماد.</div></div>';
+  } else if (c.status === 'director_returned') {
+    decision = noteMsg('warn', 'أعدتَ هذا المحضر إلى الإدارة', lastAction(c, 'director_returned')) + '<div class="msg info">' + icon('info') + '<div>بانتظار مراجعة الإدارة وتحويله مجدداً.</div></div>';
+  } else if (c.status === 'returned') {
+    decision = '<div class="msg warn">' + icon('alert') + '<div><strong>المحضر معاد للمفتش</strong>بانتظار تعديله وإعادة تسليمه.</div></div>';
   } else {
-    decision = '<div class="msg warn">' + icon('alert') + '<div><strong>المحضر معاد للمفتش</strong>بانتظار تعديله وإعادة تسليمه. لا يمكن اتخاذ قرار حالياً.</div></div>';
+    decision = '<div class="msg info">' + icon('info') + '<div><strong>' + esc(STATUS[c.status].label) + '</strong>لا يوجد إجراء مطلوب منك حالياً.</div></div>';
   }
   view.innerHTML =
-    '<div class="page-head"><div><a class="back-link" href="#admin-inbox">' + icon('prev') + 'العودة إلى صندوق المحاضر</a>' +
-    '<h1>مراجعة محضر ' + ltr(c.id) + '</h1><div style="margin-top:6px">' + badge(c.status) + '</div></div>' +
+    '<div class="page-head"><div><a class="back-link" href="#' + R.prefix + '-inbox">' + icon('prev') + 'العودة إلى ' + R.inbox + '</a>' +
+    '<h1>' + (role === 'director' ? 'اعتماد محضر ' : 'مراجعة محضر ') + ltr(c.id) + '</h1><div style="margin-top:6px">' + badge(c.status) + '</div></div>' +
     '<div class="btn-row">' + reportActions(c) + '</div></div>' +
     '<div class="review-layout">' +
       '<div class="review-main stack">' + s.info + s.viol + s.off + s.ev + s.rets + s.hist + '</div>' +
-      '<aside class="review-side" aria-labelledby="decH"><section class="card decision"><h2 id="decH">القرار الإداري</h2>' + decision +
+      '<aside class="review-side" aria-labelledby="decH"><section class="card decision"><h2 id="decH">' + (role === 'director' ? 'قرار المدير' : 'قرار المراجعة') + '</h2>' + decision +
         '<div class="legal-note" style="margin-top:14px">' + icon('info') + '<span>الاعتماد إجراء إداري لتوثيق المحضر فقط، ولا يتضمن تحديد عقوبة أو غرامة أو تقرير إدانة.</span></div>' +
       '</section></aside>' +
     '</div>';
-  return 'مراجعة محضر ' + c.id;
+  return (role === 'director' ? 'اعتماد محضر ' : 'مراجعة محضر ') + c.id;
 }
+const TRANSITIONS = {
+  forwarded: { from: ADMIN_PENDING, by: 'الإدارة', needNote: false,
+    ask: id => ['تحويل المحضر ' + id + ' إلى المدير؟', 'سيظهر المحضر في بوابة المدير للاعتماد.', 'تحويل إلى المدير', false],
+    done: 'تم تحويل المحضر إلى المدير (تجريبياً على هذا الجهاز).' },
+  returned: { from: ADMIN_PENDING, by: 'الإدارة', needNote: true,
+    ask: id => ['إرجاع المحضر ' + id + ' للمفتش؟', 'سيظهر سبب الإرجاع للمفتش ويُحفظ في سجل الإجراءات.', 'إرجاع للمفتش', true],
+    done: 'تم إرجاع المحضر للمفتش (تجريبياً على هذا الجهاز).' },
+  approved: { from: ['forwarded'], by: 'المدير', needNote: false,
+    ask: id => ['اعتماد المحضر ' + id + '؟', 'بعد الاعتماد يصبح المحضر للقراءة فقط، ويمكن تنزيل المحضر الرسمي بصيغة PDF.', 'اعتماد المحضر', false],
+    done: 'تم اعتماد المحضر (تجريبياً على هذا الجهاز).' },
+  director_returned: { from: ['forwarded'], by: 'المدير', needNote: true,
+    ask: id => ['إعادة المحضر ' + id + ' إلى الإدارة؟', 'ستظهر ملاحظتك للإدارة لمراجعة المحضر مجدداً.', 'إعادة إلى الإدارة', true],
+    done: 'تمت إعادة المحضر إلى الإدارة (تجريبياً على هذا الجهاز).' }
+};
 async function decide(id, action) {
+  const T = TRANSITIONS[action];
   const cur = getCase(id);
-  if (!cur || !PENDING.includes(cur.status)) { toast('لا يمكن اتخاذ قرار: تغيرت حالة المحضر.', 'bad'); render(); return; }
+  if (!T || !cur || !T.from.includes(cur.status)) { toast('لا يمكن اتخاذ القرار: تغيرت حالة المحضر.', 'bad'); render(); return; }
   const noteEl = $('#decNote');
   const note = noteEl.value.trim();
-  const err = $('#decErr');
-  if (action === 'returned' && !note) {
-    err.textContent = 'اكتب سبب الإرجاع؛ الملاحظة إلزامية عند إرجاع المحضر.';
+  if (T.needNote && !note) {
+    $('#decErr').textContent = 'اكتب سبب الإعادة؛ الملاحظة إلزامية في هذه الحالة.';
     noteEl.setAttribute('aria-invalid', 'true');
     noteEl.focus();
     return;
   }
-  const yes = action === 'approved'
-    ? await askConfirm('اعتماد المحضر ' + id + '؟', 'بعد الاعتماد يصبح المحضر للقراءة فقط ولا يمكن تعديله.', 'اعتماد المحضر')
-    : await askConfirm('إرجاع المحضر ' + id + ' للمفتش؟', 'سيظهر سبب الإرجاع للمفتش ويُحفظ في سجل الإجراءات.', 'إرجاع للمفتش', true);
-  if (!yes) return;
+  const a = T.ask(id);
+  if (!(await askConfirm(a[0], a[1], a[2], a[3]))) return;
   const latest = getCase(id);
-  if (!latest || !PENDING.includes(latest.status)) { toast('لا يمكن اتخاذ قرار: تغيرت حالة المحضر.', 'bad'); render(); return; }
+  if (!latest || !T.from.includes(latest.status)) { toast('لا يمكن اتخاذ القرار: تغيرت حالة المحضر.', 'bad'); render(); return; }
   const c = clone(latest);
   const now = new Date().toISOString();
   c.status = action;
-  c.reviewedAt = now;
   c.updatedAt = now;
-  c.managerNote = note;
-  if (action === 'returned') c.returnComments.push({ text: note, at: now, by: 'الإدارة' });
-  c.history.push({ action, at: now, by: 'الإدارة', note });
+  if (action === 'approved') { c.reviewedAt = now; c.managerNote = note; }
+  if (action === 'returned') { c.reviewedAt = now; c.managerNote = note; c.returnComments.push({ text: note, at: now, by: 'الإدارة' }); }
+  c.history.push({ action, at: now, by: T.by, note });
   try { upsertCase(c); } catch (e) { toast('تعذر حفظ القرار محلياً.', 'bad'); return; }
-  toast(action === 'approved' ? 'تم اعتماد المحضر (تجريبياً على هذا الجهاز).' : 'تم إرجاع المحضر للمفتش (تجريبياً على هذا الجهاز).');
+  toast(T.done);
   render();
 }
 
@@ -1834,7 +1941,7 @@ function wpdPage1(c) {
     '<div class="w-bar">المفتش</div>' +
     '<div class="w-insp"><span class="lbl">الاسم</span><span class="fill">' + esc(c.inspectorName) + '</span><span class="lbl">التوقيع</span><span class="fill">' + (c.inspectorSig ? '<img class="w-sig" src="' + esc(c.inspectorSig) + '" alt="">' : '') + '</span></div>' +
     '<div class="w-foot">توزيع النسخ : &#160; أبيض : الإدارة &#160;-&#160; أزرق : المخالف &#160;-&#160; أحمر : الدفتر</div>' +
-    '<div class="w-meta"><span>رقم المحضر: <span class="ltr">' + esc(c.id) + '</span> · اعتمدته الإدارة: ' + esc(fmtDateTime(wpdApprovedAt(c))) + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
+    '<div class="w-meta"><span>رقم المحضر: <span class="ltr">' + esc(c.id) + '</span> · اعتمده المدير: ' + esc(fmtDateTime(wpdApprovedAt(c))) + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
   '</div>';
 }
 function wpdPhotoPages(c) {
@@ -1852,32 +1959,56 @@ function wpdPhotoPages(c) {
 function wpdPages(c) { return [wpdPage1(c)].concat(wpdPhotoPages(c)); }
 
 /* Render one page of HTML to a JPEG via SVG <foreignObject> (keeps correct Arabic shaping). */
-function rasterizePage(html, scale) {
-  return new Promise((resolve, reject) => {
+const BLANK_PX = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+function loadImg(src) {
+  return new Promise((resolve, reject) => { const im = new Image(); im.onload = () => resolve(im); im.onerror = reject; im.src = src; });
+}
+/* Render one page: text and lines via SVG <foreignObject> (keeps correct Arabic shaping);
+   photos and signatures are measured in the live layout and drawn directly on the canvas,
+   so they appear in every browser (some engines drop images inside foreignObject). */
+async function rasterizePage(html, scale) {
+  const box = document.createElement('div');
+  box.setAttribute('aria-hidden', 'true');
+  box.style.cssText = 'position:fixed;left:-20000px;top:0;width:' + WPD_W + 'px;height:' + WPD_H + 'px;overflow:hidden;pointer-events:none';
+  box.setAttribute('dir', 'rtl');
+  box.innerHTML = '<style>' + WPD_CSS + '</style>' + html;
+  document.body.appendChild(box);
+  try {
+    const imgs = Array.from(box.querySelectorAll('img'));
+    await Promise.all(imgs.map(im => im.decode ? im.decode().catch(() => {}) : Promise.resolve()));
+    const page = box.querySelector('.wpd-page').getBoundingClientRect();
+    const items = imgs.map(im => {
+      const r = im.getBoundingClientRect();
+      const it = { src: im.getAttribute('src'), x: r.left - page.left, y: r.top - page.top, w: r.width, h: r.height };
+      im.style.width = r.width + 'px'; im.style.height = r.height + 'px';
+      im.setAttribute('src', BLANK_PX);
+      return it;
+    }).filter(it => it.w > 0 && it.h > 0);
     const host = document.createElement('div');
     host.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
     host.setAttribute('dir', 'rtl');
     host.setAttribute('lang', 'ar');
-    host.innerHTML = '<style>' + WPD_CSS + '</style>' + html;
+    host.innerHTML = box.innerHTML;
     const xhtml = new XMLSerializer().serializeToString(host);
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + WPD_W + '" height="' + WPD_H + '"><foreignObject x="0" y="0" width="100%" height="100%">' + xhtml + '</foreignObject></svg>';
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const cv = document.createElement('canvas');
-        cv.width = Math.round(WPD_W * scale); cv.height = Math.round(WPD_H * scale);
-        const ctx = cv.getContext('2d');
-        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
-        ctx.drawImage(img, 0, 0, cv.width, cv.height);
-        cv.toBlob(b => {
-          if (!b) { reject(new Error('blob')); return; }
-          b.arrayBuffer().then(buf => resolve({ bytes: new Uint8Array(buf), w: cv.width, h: cv.height }), reject);
-        }, 'image/jpeg', 0.9);
-      } catch (e) { reject(e); }
-    };
-    img.onerror = () => reject(new Error('render'));
-    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-  });
+    const base = await loadImg('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(WPD_W * scale); cv.height = Math.round(WPD_H * scale);
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(base, 0, 0, cv.width, cv.height);
+    for (const it of items) {
+      const im = await loadImg(it.src);
+      const r = Math.min(it.w / im.naturalWidth, it.h / im.naturalHeight); // object-fit: contain
+      const w = im.naturalWidth * r, h = im.naturalHeight * r;
+      ctx.drawImage(im, (it.x + (it.w - w) / 2) * scale, (it.y + (it.h - h) / 2) * scale, w * scale, h * scale);
+    }
+    const blob = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.9));
+    if (!blob) throw new Error('blob');
+    return { bytes: new Uint8Array(await blob.arrayBuffer()), w: cv.width, h: cv.height };
+  } finally {
+    box.remove();
+  }
 }
 /* Minimal PDF writer: one full-page JPEG per A4 page. */
 function makePdf(pages) {
@@ -2011,6 +2142,8 @@ document.addEventListener('click', e => {
     case 'load-samples': loadSamples(); break;
     case 'remove-samples': removeSamples(); break;
     case 'approve': decide(t.dataset.id, 'approved'); break;
+    case 'forward': decide(t.dataset.id, 'forwarded'); break;
+    case 'director-return': decide(t.dataset.id, 'director_returned'); break;
     case 'return': decide(t.dataset.id, 'returned'); break;
     case 'focus-field': {
       const el = document.getElementById(t.dataset.f);
@@ -2059,6 +2192,7 @@ document.addEventListener('click', e => {
       W.d.photos.splice(i, 1);
       renderPhotos();
       saveNow();
+      refreshValidation();
       $('#photoMsg').innerHTML = '<p class="sr-only">تم حذف الصورة.</p>';
       const next = $$('#photoList [data-action="del-photo"]')[Math.min(i, W.d.photos.length - 1)];
       (next || $('#camBtn')).focus();
