@@ -652,12 +652,12 @@ function renderInspectorView(view, id) {
   const ret = latestReturn(c);
   let banner = '';
   if (c.status === 'returned') banner = '<div class="msg warn" style="margin-bottom:14px">' + icon('alert') + '<div><strong>أعادت الإدارة هذا المحضر للتعديل</strong>' + esc(ret ? ret.text : '') + '<div style="margin-top:10px"><a class="btn primary" href="#edit-' + enc(c.id) + '">' + icon('edit') + 'فتح وتعديل ثم إعادة التسليم</a></div></div></div>';
-  else if (c.status === 'approved') banner = '<div class="msg ok" style="margin-bottom:14px">' + icon('check') + '<div><strong>محضر معتمد — للقراءة فقط</strong>لا يمكن تعديل المحضر بعد اعتماده.</div></div>';
+  else if (c.status === 'approved') banner = '<div class="msg ok" style="margin-bottom:14px">' + icon('check') + '<div><strong>محضر معتمد — للقراءة فقط</strong>لا يمكن تعديل المحضر بعد اعتماده. يمكنك تنزيل المحضر الرسمي بصيغة PDF من الزر أعلاه.</div></div>';
   else if (PENDING.includes(c.status)) banner = '<div class="msg info" style="margin-bottom:14px">' + icon('info') + '<div><strong>المحضر قيد المراجعة</strong>لا يمكن التعديل أثناء المراجعة. سيظهر هنا أي إرجاع أو اعتماد. (المراجعة تجريبية على هذا الجهاز ولم يُرسل المحضر إلى الوزارة.)</div></div>';
   else if (c.status === 'draft') banner = '<div class="msg info" style="margin-bottom:14px">' + icon('device') + '<div><strong>مسودة محفوظة محلياً</strong><a class="btn primary" style="margin-top:8px" href="#edit-' + enc(c.id) + '">متابعة التحرير</a></div></div>';
   view.innerHTML =
     '<div class="page-head"><div><a class="back-link" href="#reports">' + icon('prev') + 'العودة إلى تقاريري</a><h1>محضر ' + ltr(c.id) + '</h1></div>' +
-    '<div class="btn-row">' + printButton(c.id) + '</div></div>' +
+    '<div class="btn-row">' + reportActions(c) + '</div></div>' +
     banner +
     '<div class="stack">' + s.info + s.viol + s.off + s.ev + s.rets + s.hist + '</div>';
   return 'محضر ' + c.id;
@@ -1593,14 +1593,16 @@ function renderAdminReview(view, id) {
       '<button class="btn danger-outline lg" type="button" data-action="return" data-id="' + esc(c.id) + '">' + icon('prev') + 'إرجاع للمفتش</button></div>';
   } else if (c.status === 'approved') {
     const h = c.history.slice().reverse().find(x => x.action === 'approved');
-    decision = '<div class="msg ok">' + icon('check') + '<div><strong>تم اعتماد المحضر</strong>' + fmtDateTime(h ? h.at : c.reviewedAt) + '<br>المحضر للقراءة فقط ولا يمكن تعديله.</div></div>';
+    decision = '<div class="msg ok">' + icon('check') + '<div><strong>تم اعتماد المحضر</strong>' + fmtDateTime(h ? h.at : c.reviewedAt) + '<br>المحضر للقراءة فقط ولا يمكن تعديله.</div></div>' +
+      '<div class="btn-row" style="margin-top:12px"><button class="btn primary block" type="button" data-action="official-pdf" data-id="' + esc(c.id) + '">' + icon('print') + 'تنزيل المحضر الرسمي (PDF)</button></div>' +
+      '<p class="hint">ملف بصيغة نموذج WPD/01: الصفحة الأولى للمحضر، تليها صفحات الأدلة المصورة.</p>';
   } else {
     decision = '<div class="msg warn">' + icon('alert') + '<div><strong>المحضر معاد للمفتش</strong>بانتظار تعديله وإعادة تسليمه. لا يمكن اتخاذ قرار حالياً.</div></div>';
   }
   view.innerHTML =
     '<div class="page-head"><div><a class="back-link" href="#admin-inbox">' + icon('prev') + 'العودة إلى صندوق المحاضر</a>' +
     '<h1>مراجعة محضر ' + ltr(c.id) + '</h1><div style="margin-top:6px">' + badge(c.status) + '</div></div>' +
-    '<div class="btn-row">' + printButton(c.id) + '</div></div>' +
+    '<div class="btn-row">' + reportActions(c) + '</div></div>' +
     '<div class="review-layout">' +
       '<div class="review-main stack">' + s.info + s.viol + s.off + s.ev + s.rets + s.hist + '</div>' +
       '<aside class="review-side" aria-labelledby="decH"><section class="card decision"><h2 id="decH">القرار الإداري</h2>' + decision +
@@ -1681,6 +1683,287 @@ function paperHTML(c) {
     '<p class="p-note">نموذج تجريبي غير معتمد — بيانات محفوظة محلياً ولم تُرسل إلى الوزارة. ' + LEGAL_NOTE + '</p>' +
   '</article>';
 }
+/* ------------------------------------------------------------------ *
+ * Official form WPD/01 — generated after administrative approval.
+ * Reproduces the paper form layout (page 1) followed by evidence pages,
+ * then exports a PDF built in the browser (no library): every page is
+ * rendered from HTML to an image and written into a minimal PDF file.
+ * ------------------------------------------------------------------ */
+/* Optional: paste the official ministry logo as a data URL (e.g. "data:image/png;base64,...")
+   to show it in the form header. Left empty, the header shows the ministry name only. */
+const OFFICIAL_LOGO = '';
+const WPD_W = 794, WPD_H = 1123; // A4 at 96 dpi
+const WPD_CSS = `
+.wpd-page{width:${WPD_W}px;height:${WPD_H}px;box-sizing:border-box;padding:22px 30px 14px;background:#fff;color:#111;font-family:"Segoe UI",Tahoma,"Noto Naskh Arabic","Geeza Pro",Arial,sans-serif;font-size:12px;line-height:1.45;direction:rtl;position:relative;overflow:hidden;display:flex;flex-direction:column}
+.wpd-page *{box-sizing:border-box}
+.wpd-page .ltr{direction:ltr;unicode-bidi:isolate;display:inline-block}
+.w-head{display:flex;justify-content:space-between;align-items:flex-start}
+.w-min{display:flex;align-items:center;gap:10px}
+.w-min img{height:58px;width:auto}
+.w-min b{font-size:16px;color:#222;display:block;letter-spacing:.2px}
+.w-min .en{font-size:12.5px;color:#222;direction:ltr;text-align:right}
+.w-min .st{font-size:9.5px;color:#444;direction:ltr;text-align:right}
+.w-dept{text-align:left}
+.w-dept b{font-size:16px;color:#8A1538;display:block;text-align:left}
+.w-dept .en{font-size:12.5px;color:#8A1538;font-weight:700;direction:ltr}
+.w-dept .code{font-size:12px;color:#222;direction:ltr;font-weight:700}
+.w-row2{display:flex;justify-content:space-between;align-items:flex-end;margin-top:4px;padding-bottom:2px}
+.w-sec{display:flex;align-items:flex-end;gap:6px;min-width:250px}
+.w-sec .fill{min-width:150px;border-bottom:1px solid #555;font-size:16px;color:#1a2a8a;text-align:center;padding:0 6px}
+.w-no{font-size:13px;font-weight:700;display:flex;align-items:flex-end;gap:16px}
+.w-no .red{color:#C8102E;font-size:19px;letter-spacing:1px;direction:ltr}
+.w-date{display:flex;align-items:center;gap:6px;font-size:11px}
+.w-boxes{display:inline-flex;gap:2px;direction:ltr}
+.w-boxes span{display:inline-block;width:16px;height:19px;border:1px solid #777;text-align:center;font-size:12px;line-height:17px;color:#1a2a8a;font-weight:600}
+.w-boxes .gap{border:0;width:8px}
+.w-banner{background:#E8C8D0;border-radius:4px;margin-top:6px;padding:4px 14px 5px}
+.w-banner h1{text-align:center;font-size:15px;margin:0 0 2px;font-weight:700}
+.w-laws{display:grid;grid-template-columns:1fr 1fr;font-size:9.6px;line-height:1.35}
+.w-laws div:first-child{border-left:1.5px solid #fff;padding-left:12px}
+.w-laws div:last-child{padding-right:12px}
+.w-laws p{margin:0 0 1px}
+.w-fields{margin-top:4px}
+.w-line{display:flex;align-items:flex-end;gap:6px;min-height:21px;font-size:11.5px;margin-bottom:1px}
+.w-line .lbl{white-space:nowrap;font-weight:600}
+.w-line .fill{flex:1;border-bottom:1px dotted #777;color:#1a2a8a;font-size:13px;padding:0 6px;min-height:18px;line-height:18px;white-space:nowrap;overflow:hidden}
+.w-line .fill.sh{flex:0 0 150px}
+.w-line .tag{font-size:11px;direction:ltr}
+.w-circ{display:inline-block;border:1.5px solid #1a2a8a;border-radius:50%;padding:0 4px;line-height:1.2}
+.w-intro{font-weight:700;font-size:11.5px;margin:2px 0}
+table.w-tbl{width:100%;border-collapse:collapse;font-size:9.5px;line-height:1.33}
+.w-tbl th{background:#D9D9D9;font-size:11px;padding:1px;border:1px solid #888}
+.w-tbl td{border-bottom:1px solid #888;padding:2px 4px;vertical-align:middle}
+.w-tbl td.n{width:26px;text-align:center;font-size:10px;direction:ltr}
+.w-tbl td.cb{width:22px;text-align:center}
+.w-tbl td.cb i{display:inline-block;width:12px;height:12px;border:1.2px solid #333;position:relative;vertical-align:middle}
+.w-tbl td.cb i.on::after{content:"";position:absolute;left:3px;top:-2px;width:5px;height:10px;border:solid #1a2a8a;border-width:0 2.2px 2.2px 0;transform:rotate(45deg)}
+.w-tbl td.pen{width:215px;border:1px solid #888;text-align:center;font-size:9.4px;line-height:1.45;padding:3px 7px}
+.w-tbl tr.sel td.t{color:#000;font-weight:600}
+.w-tbl{border:1px solid #888}
+.w-expl{margin-top:4px;font-size:11.5px;display:flex;gap:6px;align-items:flex-start}
+.w-expl .lbl{font-weight:600}
+.w-expl .lbl{white-space:nowrap}
+.w-expl .lines{flex:1;min-height:40px;color:#1a2a8a;font-size:11.5px;padding:0 6px;line-height:20px;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 19px,#999 19px,#999 20px)}
+.w-sulh{background:#D9D9D9;margin-top:5px;padding:4px 12px;font-size:10px;font-weight:600;line-height:1.5}
+.w-off{margin-top:4px}
+.w-off .row{display:flex;align-items:flex-end;gap:10px;min-height:26px;font-size:11.5px}
+.w-off .fill{flex:1;border-bottom:1px dotted #777;color:#1a2a8a;font-size:13px;padding:0 6px;min-height:20px}
+.w-sig{height:38px;max-width:170px;object-fit:contain;display:block}
+.w-chk{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.w-chk i{display:inline-block;width:14px;height:14px;border:1.2px solid #333;position:relative}
+.w-chk i.on::after{content:"";position:absolute;left:3px;top:-2px;width:5px;height:10px;border:solid #1a2a8a;border-width:0 2.2px 2.2px 0;transform:rotate(45deg)}
+.w-bar{background:#E8C8D0;margin-top:5px;padding:3px 12px;font-weight:700;font-size:11.5px}
+.w-insp{display:flex;align-items:flex-end;gap:10px;min-height:36px;margin-top:0;font-size:11.5px}
+.w-insp .fill{flex:1;border-bottom:1px dotted #777;color:#1a2a8a;font-size:14px;padding:0 6px;min-height:22px}
+.w-foot{margin-top:auto;text-align:center;font-size:11px;font-weight:600;padding-top:4px}
+.w-meta{display:flex;justify-content:space-between;font-size:8.5px;color:#777;margin-top:4px;direction:rtl}
+.w-ph-head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #8A1538;padding-bottom:6px;margin-bottom:12px;font-size:12px}
+.w-ph-head b{color:#8A1538;font-size:14px}
+.w-ph{flex:1;display:flex;flex-direction:column;gap:14px}
+.w-ph figure{margin:0;flex:none;display:flex;flex-direction:column}
+.w-ph .img{height:462px;background:#f3f3f3;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid #ccc}
+.w-ph img{width:100%;height:100%;object-fit:contain;display:block}
+.w-ph figcaption{font-size:11px;padding-top:4px}
+`;
+function wpdBoxes(str, n, groups) {
+  const chars = latinDigits(str || '').replace(/\s/g, '').split('').slice(0, n);
+  let out = '';
+  for (let i = 0; i < n; i++) {
+    if (groups && groups.includes(i)) out += '<span class="gap"></span>';
+    out += '<span>' + esc(chars[i] || '') + '</span>';
+  }
+  return '<span class="w-boxes">' + out + '</span>';
+}
+function wpdSerial(c) { const m = String(c.id).match(/(\d{5})$/); return m ? m[1] : String(c.id).slice(-5); }
+function wpdApprovedAt(c) {
+  const h = c.history.slice().reverse().find(x => x.action === 'approved');
+  return h ? h.at : c.reviewedAt;
+}
+function wpdPage1(c) {
+  const d = c.date ? new Date(c.date + 'T00:00:00') : null;
+  const weekday = d && !isNaN(d) ? d.toLocaleDateString('ar-QA', { weekday: 'long' }) : '';
+  const ymd = d && !isNaN(d) ? d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate() : '';
+  const dateBoxes = d && !isNaN(d) ? pad(d.getDate()) + pad(d.getMonth() + 1) + d.getFullYear() : '';
+  let tm = '', am = null;
+  if (/^\d{1,2}:\d{2}/.test(c.time || '')) { const [hh, mm] = c.time.split(':').map(Number); tm = (hh % 12 || 12) + ':' + pad(mm); am = hh < 12; }
+  const sel = new Set(c.violationNos);
+  const groups = { A: [1, 14], B: [15, 15], C: [16, 19], D: [20, 20] };
+  const rows = VIOLATIONS.map(v => {
+    const g = groups[v.pen];
+    const pen = v.no === g[0] ? '<td class="pen" rowspan="' + (g[1] - g[0] + 1) + '">' + esc(PENALTIES[v.pen].text) + '</td>' : '';
+    return '<tr' + (sel.has(v.no) ? ' class="sel"' : '') + '><td class="n">' + v.no + '.</td><td class="cb"><i' + (sel.has(v.no) ? ' class="on"' : '') + '></i></td><td class="t">' + esc(v.text) + '</td>' + pen + '</tr>';
+  }).join('');
+  const notes = [c.notes ? c.notes.trim() : '', c.chips.length ? 'أرقام شرائح الإبل: ' + c.chips.join('، ') : ''].filter(Boolean).join(' — ');
+  const logo = OFFICIAL_LOGO ? '<img src="' + esc(OFFICIAL_LOGO) + '" alt="">' : '';
+  const sulh = c.settlement === 'offered'
+    ? 'هذا وقد تم عرض الصلح على المخالف في المخالفات التي يجوز فيها الصلح، وأقر المسؤول بمخالفته لأحكام القانون، وطُلب منه مراجعة الإدارة لاستكمال إجراءات الصلح.'
+    : c.settlement === 'not_offered' ? 'لم يُعرض الصلح على المخالف.' : 'عرض الصلح: لم يحدد.';
+  return '<div class="wpd-page">' +
+    '<div class="w-head">' +
+      '<div class="w-min">' + logo + '<div><b>وزارة البيئة والتغيـر المناخي</b><div class="en">Ministry of Environment and Climate Change</div><div class="st">State of Qatar · دولة قطر</div></div></div>' +
+      '<div class="w-dept"><b>إدارة الحماية البريـة</b><div class="en">Wild Protection Department</div><div class="code">WPD/01/</div></div>' +
+    '</div>' +
+    '<div class="w-row2">' +
+      '<div class="w-sec"><span>قسم</span><span class="fill">' + esc(c.section || '') + '</span></div>' +
+      '<div class="w-no"><span class="ltr">Section</span><span class="ltr">№ <span class="red">' + esc(wpdSerial(c)) + '</span></span></div>' +
+      '<div class="w-date"><span>التاريخ</span>' + wpdBoxes(dateBoxes, 8, [2, 4]) + '<span class="ltr">Date</span></div>' +
+    '</div>' +
+    '<div class="w-banner"><h1>محضر ضبط مخالفة بموجب أحكام:</h1><div class="w-laws">' +
+      '<div><p>- ' + esc(LAWS[0]) + '</p><p>- ' + esc(LAWS[1]) + '</p><p>- ' + esc(LAWS[2]) + '</p></div>' +
+      '<div><p>- ' + esc(LAWS[3]) + '</p><p>- ' + esc(LAWS[4]) + '</p></div>' +
+    '</div></div>' +
+    '<div class="w-fields">' +
+      '<div class="w-line"><span class="lbl">إنه في يوم/ التاريخ/ الساعة :</span><span class="fill">' + esc(weekday) + '&#160;&#160;&#160;<span class="ltr">' + esc(ymd) + '</span>&#160;&#160;&#160;<span class="ltr">' + esc(tm) + '</span></span>' +
+        '<span class="tag">' + (am === true ? '<span class="w-circ">ص</span> / م' : am === false ? 'ص / <span class="w-circ">م</span>' : 'ص / م') + '</span></div>' +
+      '<div class="w-line"><span class="lbl">حرر هذا المحضر بمعرفة المفتش السيد/</span><span class="fill">' + esc(c.inspectorName) + '</span><span class="lbl">وظيفة رقم:</span><span class="fill sh"><span class="ltr">' + esc(c.inspectorNo) + '</span></span></div>' +
+      '<div class="w-line"><span class="lbl">حيث وجد أن الشركة/ السيد:</span><span class="fill">' + esc(c.person) + '</span><span class="lbl">جوال رقم :</span><span class="fill sh"><span class="ltr">' + esc(c.phone) + '</span></span></div>' +
+      '<div class="w-line"><span class="lbl">بطاقة شخصية رقم:</span>' + wpdBoxes(c.qid, 11) + '</div>' +
+      '<div class="w-line"><span class="lbl">منطقة</span><span class="fill">' + esc(c.place) + '</span><span class="lbl">الإحداثيات:</span>' +
+        '<span class="fill sh" style="flex-basis:120px"><span class="ltr">E ' + (hasCoords(c) ? Number(c.lng).toFixed(6) : '') + '</span></span>' +
+        '<span class="fill sh" style="flex-basis:120px"><span class="ltr">N ' + (hasCoords(c) ? Number(c.lat).toFixed(6) : '') + '</span></span></div>' +
+    '</div>' +
+    '<p class="w-intro">يقوم بأعمال مخالفة للقانون وتم ضبط المخالفات التالية:</p>' +
+    '<table class="w-tbl"><thead><tr><th colspan="3">المخالفة</th><th>العقوبة المقررة</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div class="w-expl"><span class="lbl">شرح المخالفة:</span><div class="lines">' + esc(notes) + '</div></div>' +
+    '<div class="w-sulh">' + esc(sulh) + '</div>' +
+    '<div class="w-off">' +
+      '<div class="row"><span class="lbl">اسم المخالف</span><span class="fill">' + esc(c.person) + '</span><span class="lbl">رقم البطاقة الشخصية</span>' + wpdBoxes(c.qid, 11) + '</div>' +
+      '<div class="row"><span class="lbl">توقيع المخالف</span><span class="fill">' + (c.offenderSig ? '<img class="w-sig" src="' + esc(c.offenderSig) + '" alt="">' : '') + '</span>' +
+        '<span class="w-chk"><i' + (c.signature === 'refused' ? ' class="on"' : '') + '></i>رفض التوقيع</span></div>' +
+    '</div>' +
+    '<div class="w-bar">المفتش</div>' +
+    '<div class="w-insp"><span class="lbl">الاسم</span><span class="fill">' + esc(c.inspectorName) + '</span><span class="lbl">التوقيع</span><span class="fill">' + (c.inspectorSig ? '<img class="w-sig" src="' + esc(c.inspectorSig) + '" alt="">' : '') + '</span></div>' +
+    '<div class="w-foot">توزيع النسخ : &#160; أبيض : الإدارة &#160;-&#160; أزرق : المخالف &#160;-&#160; أحمر : الدفتر</div>' +
+    '<div class="w-meta"><span>رقم المحضر: <span class="ltr">' + esc(c.id) + '</span> · اعتمدته الإدارة: ' + esc(fmtDateTime(wpdApprovedAt(c))) + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
+  '</div>';
+}
+function wpdPhotoPages(c) {
+  const pages = [];
+  for (let i = 0; i < c.photos.length; i += 2) {
+    const pair = c.photos.slice(i, i + 2);
+    pages.push('<div class="wpd-page">' +
+      '<div class="w-ph-head"><b>الأدلة المصورة</b><span>محضر رقم <span class="ltr">' + esc(c.id) + '</span> · <span class="ltr">WPD/01</span></span></div>' +
+      '<div class="w-ph">' + pair.map((p, j) => '<figure><div class="img"><img src="' + esc(p.preview) + '" alt=""></div><figcaption><b>' + (i + j + 1) + '. ' + esc(PHOTO_CAT[p.category]) + '</b>' + (p.caption ? ' — ' + esc(p.caption) : '') + '</figcaption></figure>').join('') + '</div>' +
+      '<div class="w-meta"><span>صفحة ' + (pages.length + 2) + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
+    '</div>');
+  }
+  return pages;
+}
+function wpdPages(c) { return [wpdPage1(c)].concat(wpdPhotoPages(c)); }
+
+/* Render one page of HTML to a JPEG via SVG <foreignObject> (keeps correct Arabic shaping). */
+function rasterizePage(html, scale) {
+  return new Promise((resolve, reject) => {
+    const host = document.createElement('div');
+    host.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+    host.setAttribute('dir', 'rtl');
+    host.setAttribute('lang', 'ar');
+    host.innerHTML = '<style>' + WPD_CSS + '</style>' + html;
+    const xhtml = new XMLSerializer().serializeToString(host);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + WPD_W + '" height="' + WPD_H + '"><foreignObject x="0" y="0" width="100%" height="100%">' + xhtml + '</foreignObject></svg>';
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(WPD_W * scale); cv.height = Math.round(WPD_H * scale);
+        const ctx = cv.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.drawImage(img, 0, 0, cv.width, cv.height);
+        cv.toBlob(b => {
+          if (!b) { reject(new Error('blob')); return; }
+          b.arrayBuffer().then(buf => resolve({ bytes: new Uint8Array(buf), w: cv.width, h: cv.height }), reject);
+        }, 'image/jpeg', 0.9);
+      } catch (e) { reject(e); }
+    };
+    img.onerror = () => reject(new Error('render'));
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+}
+/* Minimal PDF writer: one full-page JPEG per A4 page. */
+function makePdf(pages) {
+  const te = new TextEncoder();
+  const parts = []; let len = 0; const offs = [];
+  const push = x => { const b = typeof x === 'string' ? te.encode(x) : x; parts.push(b); len += b.length; };
+  const obj = (id, body) => { offs[id] = len; push(id + ' 0 obj\n' + body + '\nendobj\n'); };
+  const W = 595.28, H = 841.89;
+  push('%PDF-1.4\n%âãÏÓ\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [' + pages.map((_, i) => (3 + 3 * i) + ' 0 R').join(' ') + '] /Count ' + pages.length + ' >>');
+  pages.forEach((im, i) => {
+    const p = 3 + 3 * i;
+    obj(p, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + W + ' ' + H + '] /Resources << /XObject << /Im' + i + ' ' + (p + 2) + ' 0 R >> >> /Contents ' + (p + 1) + ' 0 R >>');
+    const cs = 'q ' + W + ' 0 0 ' + H + ' 0 0 cm /Im' + i + ' Do Q';
+    obj(p + 1, '<< /Length ' + cs.length + ' >>\nstream\n' + cs + '\nendstream');
+    offs[p + 2] = len;
+    push((p + 2) + ' 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + im.w + ' /Height ' + im.h + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + im.bytes.length + ' >>\nstream\n');
+    push(im.bytes);
+    push('\nendstream\nendobj\n');
+  });
+  const size = 3 + 3 * pages.length;
+  const xref = len;
+  let x = 'xref\n0 ' + size + '\n0000000000 65535 f \n';
+  for (let i = 1; i < size; i++) x += String(offs[i]).padStart(10, '0') + ' 00000 n \n';
+  push(x + 'trailer\n<< /Size ' + size + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+  return new Blob(parts, { type: 'application/pdf' });
+}
+async function buildOfficialPdf(c) {
+  const pages = [];
+  for (const html of wpdPages(c)) pages.push(await rasterizePage(html, 2));
+  return makePdf(pages);
+}
+let pdfBusy = false;
+async function downloadOfficial(id, btn) {
+  const c = getCase(id);
+  if (!c || c.status !== 'approved' || pdfBusy) return;
+  pdfBusy = true;
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner" aria-hidden="true"></span>جارٍ تجهيز الملف…'; }
+  const restore = () => { pdfBusy = false; if (btn && document.contains(btn)) { btn.disabled = false; btn.innerHTML = label; } };
+  let blob;
+  try { blob = await buildOfficialPdf(c); }
+  catch (e) {
+    restore();
+    toast(EMBEDDED ? 'تعذر إنشاء ملف PDF على هذا المتصفح.' : 'تعذر إنشاء ملف PDF؛ استخدم «طباعة النموذج الرسمي» ثم اختر الحفظ بصيغة PDF.', 'bad');
+    return;
+  }
+  const filename = 'WPD01-' + c.id + '.pdf';
+  const host = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('downloads').catch(() => null) : null;
+  if (host) {
+    try { await host.save({ filename, data: blob }); toast('تم حفظ المحضر الرسمي (PDF).'); }
+    catch (e) { if (!e || e.code !== 'declined') toast('تعذر حفظ الملف في هذا العرض.', 'bad'); }
+    restore();
+    return;
+  }
+  if (EMBEDDED) { restore(); toast('تنزيل الملفات غير متاح في هذا العرض.', 'bad'); return; }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.style.display = 'none';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+  toast('تم تنزيل المحضر الرسمي (PDF).');
+  restore();
+}
+/* Local (not embedded): vector print of the same official form; choose "Save as PDF" in the dialog. */
+function printOfficial(id) {
+  const c = getCase(id);
+  if (!c || c.status !== 'approved') return;
+  let st = document.getElementById('wpdPrintStyle');
+  if (!st) { st = document.createElement('style'); st.id = 'wpdPrintStyle'; document.head.appendChild(st); }
+  st.textContent = WPD_CSS + '@media print{@page{size:A4;margin:0}.wpd-page{break-after:page;page-break-after:always}.wpd-page:last-child{break-after:auto;page-break-after:auto}}';
+  $('#printArea').innerHTML = wpdPages(c).join('');
+  const imgs = $$('#printArea img');
+  Promise.all(imgs.map(im => im.complete ? Promise.resolve() : new Promise(r => { im.onload = im.onerror = r; }))).then(() => window.print());
+}
+function reportActions(c) {
+  let out = '';
+  if (c.status === 'approved') {
+    out += '<button class="btn primary" type="button" data-action="official-pdf" data-id="' + esc(c.id) + '">' + icon('print') + 'تنزيل المحضر الرسمي (PDF)</button>';
+    if (!EMBEDDED) out += '<button class="btn secondary" type="button" data-action="official-print" data-id="' + esc(c.id) + '">' + icon('print') + 'طباعة النموذج الرسمي</button>';
+  }
+  if (!EMBEDDED && c.status !== 'approved') out += '<button class="btn secondary" type="button" data-action="print" data-id="' + esc(c.id) + '">' + icon('print') + 'طباعة / PDF</button>';
+  return out;
+}
+
 function printButton(id) {
   return EMBEDDED ? '' : '<button class="btn secondary" type="button" data-action="print" data-id="' + esc(id) + '">' + icon('print') + 'طباعة / PDF</button>';
 }
@@ -1705,6 +1988,8 @@ document.addEventListener('click', e => {
     case 'close-drawer': closeDrawer(true); break;
     case 'close-viewer': closeViewer(); break;
     case 'print': printCase(t.dataset.id); break;
+    case 'official-pdf': downloadOfficial(t.dataset.id, t); break;
+    case 'official-print': printOfficial(t.dataset.id); break;
     case 'zoom': {
       let ph, list;
       if (t.dataset.case) { const c = getCase(t.dataset.case); list = c ? c.photos : []; }
@@ -1813,7 +2098,7 @@ window.addEventListener('pagehide', () => { if (W && W.saveTimer) saveNow(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && W && W.saveTimer) saveNow(); });
 window.addEventListener('online', updateNet);
 window.addEventListener('offline', updateNet);
-window.addEventListener('afterprint', () => { $('#printArea').innerHTML = ''; });
+window.addEventListener('afterprint', () => { $('#printArea').innerHTML = ''; const st = document.getElementById('wpdPrintStyle'); if (st) st.remove(); });
 
 /* ------------------------------------------------------------------ *
  * Boot
