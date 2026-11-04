@@ -21,6 +21,9 @@ const LOCALE = 'ar-QA-u-nu-latn';
 const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
 const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
 const QATAR_CENTER = [25.3, 51.2];
+/* Inside an embedded viewer (iframe) printing, external map tiles and device location are
+   usually blocked, so those affordances are hidden or explained. Opened directly in Edge = full app. */
+const EMBEDDED = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
 
 const LAWS = [
   'القانون رقم (1) لسنة 1993 بشأن منع تجريف الأراضي الزراعية ورمال الشواطئ',
@@ -284,18 +287,18 @@ function updateStorageUse() {
  * ------------------------------------------------------------------ */
 const NAV = {
   inspector: [
-    { h: '#/home', k: 'home', label: 'الرئيسية', icon: 'home' },
-    { h: '#/reports', k: 'reports', label: 'تقاريري', icon: 'list' },
-    { h: '#/new', k: 'new', label: 'محضر جديد', icon: 'plus', accent: true }
+    { h: '#home', k: 'home', label: 'الرئيسية', icon: 'home' },
+    { h: '#reports', k: 'reports', label: 'تقاريري', icon: 'list' },
+    { h: '#new', k: 'new', label: 'محضر جديد', icon: 'plus', accent: true }
   ],
   admin: [
-    { h: '#/admin', k: 'adash', label: 'لوحة الإدارة', icon: 'grid' },
-    { h: '#/admin/inbox', k: 'inbox', label: 'صندوق المحاضر', icon: 'inbox' }
+    { h: '#admin', k: 'adash', label: 'لوحة الإدارة', icon: 'grid' },
+    { h: '#admin-inbox', k: 'inbox', label: 'صندوق المحاضر', icon: 'inbox' }
   ]
 };
 const SWITCH = {
-  inspector: { h: '#/admin', k: 'admin', label: 'الإدارة', long: 'بوابة الإدارة', icon: 'shield' },
-  admin: { h: '#/home', k: 'home-switch', label: 'بوابة المفتش', long: 'بوابة المفتش', icon: 'user' }
+  inspector: { h: '#admin', k: 'admin', label: 'الإدارة', long: 'بوابة الإدارة', icon: 'shield' },
+  admin: { h: '#home', k: 'home-switch', label: 'بوابة المفتش', long: 'بوابة المفتش', icon: 'user' }
 };
 function navKey(p) {
   if (p[0] === 'admin') return p[1] === 'inbox' || p[1] === 'review' ? 'inbox' : 'adash';
@@ -353,13 +356,45 @@ function closeViewer() {
   if (typeof d.close === 'function' && d.open) d.close(); else d.removeAttribute('open');
   $('#viewerImg').removeAttribute('src');
 }
+/* In-page confirmation (native confirm() is unavailable in embedded viewers). */
+function askConfirm(title, body, okLabel, danger) {
+  return new Promise(resolve => {
+    const d = $('#confirmDlg');
+    $('#confirmTitle').textContent = title;
+    $('#confirmBody').textContent = body || '';
+    $('#confirmBody').hidden = !body;
+    const ok = $('#confirmOk');
+    ok.textContent = okLabel || 'تأكيد';
+    ok.className = 'btn lg ' + (danger ? 'danger' : 'primary');
+    const prevFocus = document.activeElement;
+    const finish = v => {
+      ok.onclick = null; $('#confirmCancel').onclick = null; d.onclose = null;
+      if (d.open) { if (typeof d.close === 'function') d.close(); else d.removeAttribute('open'); }
+      if (prevFocus && prevFocus.focus && document.contains(prevFocus)) prevFocus.focus({ preventScroll: true });
+      resolve(v);
+    };
+    ok.onclick = () => finish(true);
+    $('#confirmCancel').onclick = () => finish(false);
+    d.onclose = () => finish(false);
+    if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
+    $('#confirmCancel').focus();
+  });
+}
 function updateNet() { $('#netState').hidden = navigator.onLine !== false; }
 
 /* ------------------------------------------------------------------ *
  * Router
  * ------------------------------------------------------------------ */
+/* Routes use plain "#name" hashes (letters, digits, hyphens) so they also work inside
+   embedded viewers: #home, #reports-returned, #new, #edit-<id>, #view-<id>,
+   #admin, #admin-inbox-<filter>, #admin-review-<id>. Old "#/a/b" links still parse. */
 function parseRoute() {
-  return location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(s => { try { return decodeURIComponent(s); } catch (e) { return s; } });
+  let h = location.hash.replace(/^#/, '');
+  try { h = decodeURIComponent(h); } catch (e) { /* keep raw */ }
+  if (h.charAt(0) === '/') return h.split('/').filter(Boolean);
+  const m = h.match(/^(admin-review|admin-inbox|reports|edit|view)-(.+)$/);
+  if (m) return m[1].split('-').concat([m[2]]);
+  return h ? h.split('-') : [];
 }
 function render() {
   leaveWizard();
@@ -392,7 +427,7 @@ function emptyState(text, cta) {
   return '<div class="card empty"><p>' + esc(text) + '</p>' + (cta || '') + '</div>';
 }
 function notFound(backHref) {
-  return '<div class="card empty"><h1>المحضر غير موجود</h1><p>ربما حُذف أو لم يُحفظ على هذا الجهاز.</p><a class="btn secondary" href="' + (backHref || '#/home') + '">العودة</a></div>';
+  return '<div class="card empty"><h1>المحضر غير موجود</h1><p>ربما حُذف أو لم يُحفظ على هذا الجهاز.</p><a class="btn secondary" href="' + (backHref || '#home') + '">العودة</a></div>';
 }
 function latestReturn(c) { return c.returnComments.length ? c.returnComments[c.returnComments.length - 1] : null; }
 
@@ -401,13 +436,13 @@ function reportCard(c, mode) {
   const cls = c.status === 'returned' ? ' is-returned' : c.status === 'draft' ? ' is-draft' : '';
   let actions;
   if (mode === 'admin') {
-    actions = '<a class="btn ' + (PENDING.includes(c.status) ? 'primary' : 'secondary') + ' block" href="#/admin/review/' + enc(c.id) + '">' + icon('eye') + (PENDING.includes(c.status) ? 'فتح للمراجعة' : 'عرض المحضر') + '</a>';
+    actions = '<a class="btn ' + (PENDING.includes(c.status) ? 'primary' : 'secondary') + ' block" href="#admin-review-' + enc(c.id) + '">' + icon('eye') + (PENDING.includes(c.status) ? 'فتح للمراجعة' : 'عرض المحضر') + '</a>';
   } else if (c.status === 'draft') {
-    actions = '<a class="btn primary" href="#/edit/' + enc(c.id) + '">' + icon('edit') + 'متابعة التحرير</a><button class="btn danger-outline" type="button" data-action="delete-draft" data-id="' + esc(c.id) + '">' + icon('trash') + 'حذف</button>';
+    actions = '<a class="btn primary" href="#edit-' + enc(c.id) + '">' + icon('edit') + 'متابعة التحرير</a><button class="btn danger-outline" type="button" data-action="delete-draft" data-id="' + esc(c.id) + '">' + icon('trash') + 'حذف</button>';
   } else if (c.status === 'returned') {
-    actions = '<a class="btn primary" href="#/edit/' + enc(c.id) + '">' + icon('edit') + 'فتح وتعديل</a><a class="btn secondary" href="#/view/' + enc(c.id) + '">عرض</a>';
+    actions = '<a class="btn primary" href="#edit-' + enc(c.id) + '">' + icon('edit') + 'فتح وتعديل</a><a class="btn secondary" href="#view-' + enc(c.id) + '">عرض</a>';
   } else {
-    actions = '<a class="btn secondary block" href="#/view/' + enc(c.id) + '">' + icon('eye') + 'عرض المحضر</a>';
+    actions = '<a class="btn secondary block" href="#view-' + enc(c.id) + '">' + icon('eye') + 'عرض المحضر</a>';
   }
   const vcount = c.violationNos.length + c.legacyViolations.length;
   return '<article class="rcard' + cls + '" aria-label="محضر ' + esc(c.id) + '">' +
@@ -483,6 +518,53 @@ function detailSections(c, opts) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Example data (clearly marked) for demonstrations
+ * ------------------------------------------------------------------ */
+const SAMPLE_FLAG = 'mecc_samples_loaded_v1';
+function sampleCases() {
+  const d = n => { const x = new Date(); x.setDate(x.getDate() - n); return x; };
+  const iso = (n, h) => { const x = d(n); x.setHours(h, 15, 0, 0); return x.toISOString(); };
+  const day = n => { const x = d(n); return x.getFullYear() + '-' + pad(x.getMonth() + 1) + '-' + pad(x.getDate()); };
+  const base = { offenderType: 'person', phone: '', address: '', settlement: '', signature: 'unspecified', photos: [], inspectorName: 'مفتش تجريبي', inspectorNo: '000000', section: 'الشمال' };
+  return [
+    Object.assign({}, base, { id: 'MECC-DEMO-0000001', status: 'returned', date: day(3), time: '07:35', place: 'مثال: منطقة الخريب – روضة طبيعية', lat: 25.4495, lng: 51.2234, accuracy: 9, locSource: 'gps',
+      violationNos: [1], chips: ['000000000000001'], notes: 'مثال تجريبي: رعي قطيع إبل داخل منطقة بيئة نباتية محمية.', person: 'مخالف تجريبي (مثال)', qid: '00000000000', signature: 'refused',
+      createdAt: iso(3, 7), updatedAt: iso(1, 10), submittedAt: iso(3, 9), reviewedAt: iso(1, 10), managerNote: 'يرجى إرفاق صورة لقارئ الشريحة الإلكترونية وتوضيح حدود المنطقة المحمية.',
+      returnComments: [{ text: 'يرجى إرفاق صورة لقارئ الشريحة الإلكترونية وتوضيح حدود المنطقة المحمية.', at: iso(1, 10), by: 'الإدارة' }],
+      history: [{ action: 'created', at: iso(3, 7), by: 'مفتش تجريبي' }, { action: 'submitted', at: iso(3, 9), by: 'مفتش تجريبي' }, { action: 'returned', at: iso(1, 10), by: 'الإدارة', note: 'يرجى إرفاق صورة لقارئ الشريحة الإلكترونية وتوضيح حدود المنطقة المحمية.' }] }),
+    Object.assign({}, base, { id: 'MECC-DEMO-0000002', status: 'submitted', date: day(1), time: '16:20', place: 'مثال: محيط روضة شمال الدوحة', lat: 25.62, lng: 51.41, accuracy: 15, locSource: 'gps',
+      violationNos: [10, 14], notes: 'مثال تجريبي: إشعال نار ومرور مركبة خارج المسار.', offenderType: 'company', person: 'شركة تجريبية (مثال)', qid: '00000', settlement: 'offered', signature: 'signed',
+      createdAt: iso(1, 16), updatedAt: iso(1, 17), submittedAt: iso(1, 17),
+      returnComments: [], history: [{ action: 'created', at: iso(1, 16), by: 'مفتش تجريبي' }, { action: 'submitted', at: iso(1, 17), by: 'مفتش تجريبي' }] }),
+    Object.assign({}, base, { id: 'MECC-DEMO-0000003', status: 'draft', date: day(0), time: '08:05', place: 'مثال: ساحل الغارية', lat: null, lng: null,
+      violationNos: [17], notes: '', person: '', createdAt: iso(0, 8), updatedAt: iso(0, 8),
+      returnComments: [], history: [{ action: 'created', at: iso(0, 8), by: 'مفتش تجريبي' }] }),
+    Object.assign({}, base, { id: 'MECC-DEMO-0000004', status: 'approved', date: day(6), time: '10:40', place: 'مثال: مزرعة جنوب الخور', lat: 25.6, lng: 51.48, accuracy: 20, locSource: 'map',
+      violationNos: [15], notes: 'مثال تجريبي: نقل أتربة من أرض زراعية.', person: 'مخالف تجريبي آخر (مثال)', qid: '00000000001',
+      createdAt: iso(6, 10), updatedAt: iso(4, 12), submittedAt: iso(6, 12), reviewedAt: iso(4, 12), managerNote: 'تمت المراجعة.',
+      returnComments: [], history: [{ action: 'created', at: iso(6, 10), by: 'مفتش تجريبي' }, { action: 'submitted', at: iso(6, 12), by: 'مفتش تجريبي' }, { action: 'approved', at: iso(4, 12), by: 'الإدارة', note: 'تمت المراجعة.' }] })
+  ].map(c => Object.assign(c, { violations: c.violationNos.map(n => VBY[n].text) }));
+}
+function loadSamples() {
+  try {
+    const ids = new Set(readCases().map(c => c.id));
+    writeCases(readCases().concat(sampleCases().filter(c => !ids.has(c.id)).map(normalize)));
+    localStorage.setItem(SAMPLE_FLAG, '1');
+    toast('تم تحميل محاضر تجريبية (أمثلة) على هذا الجهاز.', 'info');
+  } catch (e) { toast('تعذر تحميل الأمثلة.', 'bad'); }
+  render();
+}
+function removeSamples() {
+  try { writeCases(readCases().filter(c => !/^MECC-DEMO-/.test(c.id))); toast('تم حذف المحاضر التجريبية.'); } catch (e) { toast('تعذر الحذف.', 'bad'); }
+  render();
+}
+const sampleBtn = () => '<button class="btn secondary" type="button" data-action="load-samples">' + icon('list') + 'تحميل محاضر تجريبية</button>';
+function samplesNote() {
+  return readCases().some(c => /^MECC-DEMO-/.test(c.id))
+    ? '<div class="msg info" style="margin-top:14px">' + icon('info') + '<div>المحاضر التي يبدأ رقمها بـ <bdi dir="ltr">MECC-DEMO</bdi> أمثلة تجريبية للعرض فقط. <button class="btn ghost sm" type="button" data-action="remove-samples">حذف الأمثلة</button></div></div>' : '';
+}
+
+/* ------------------------------------------------------------------ *
  * Inspector — home
  * ------------------------------------------------------------------ */
 function greeting() { const h = new Date().getHours(); return h < 12 ? 'صباح الخير' : 'مساء الخير'; }
@@ -499,19 +581,20 @@ function renderHome(view) {
       '<p class="eyebrow">بوابة المفتش · الضبط القضائي</p>' +
       '<h1>' + greeting() + (name ? '، ' + esc(name) : '') + '</h1>' +
       '<p class="lead">سجّل المخالفات البيئية ميدانياً، وتُحفظ على جهازك تلقائياً حتى تسليمها للمراجعة.</p>' +
-      '<a class="btn primary xl" href="#/new">' + icon('plus', 'ic-lg') + 'محضر جديد</a>' +
+      '<a class="btn primary xl" href="#new">' + icon('plus', 'ic-lg') + 'محضر جديد</a>' +
     '</section>' +
     '<div class="stats" role="list">' +
-      '<a role="listitem" class="stat st-action" href="#/reports/action"><span class="stat-label">تحتاج إجراء</span><strong>' + action.length + '</strong><span class="stat-sub">مسودات ومعادة</span></a>' +
-      '<a role="listitem" class="stat st-review" href="#/reports/review"><span class="stat-label">قيد المراجعة</span><strong>' + review.length + '</strong><span class="stat-sub">لدى الإدارة</span></a>' +
-      '<a role="listitem" class="stat st-ok" href="#/reports/approved"><span class="stat-label">معتمدة</span><strong>' + approved.length + '</strong><span class="stat-sub">للقراءة فقط</span></a>' +
+      '<a role="listitem" class="stat st-action" href="#reports-action"><span class="stat-label">تحتاج إجراء</span><strong>' + action.length + '</strong><span class="stat-sub">مسودات ومعادة</span></a>' +
+      '<a role="listitem" class="stat st-review" href="#reports-review"><span class="stat-label">قيد المراجعة</span><strong>' + review.length + '</strong><span class="stat-sub">لدى الإدارة</span></a>' +
+      '<a role="listitem" class="stat st-ok" href="#reports-approved"><span class="stat-label">معتمدة</span><strong>' + approved.length + '</strong><span class="stat-sub">للقراءة فقط</span></a>' +
     '</div>' +
     (returned.length ?
       '<div class="sec-head"><h2>' + icon('alert') + ' محاضر معادة للتعديل (' + returned.length + ')</h2></div>' +
       '<div class="cards grid-2">' + returned.map(c => reportCard(c)).join('') + '</div>' : '') +
-    '<div class="sec-head"><h2>أحدث المحاضر</h2>' + (list.length ? '<a href="#/reports">عرض الكل</a>' : '') + '</div>' +
+    '<div class="sec-head"><h2>أحدث المحاضر</h2>' + (list.length ? '<a href="#reports">عرض الكل</a>' : '') + '</div>' +
     (recent.length ? '<div class="cards grid-2">' + recent.map(c => reportCard(c)).join('') + '</div>'
-      : returned.length ? '' : emptyState('لا توجد محاضر بعد. ابدأ بإنشاء أول محضر.', '<a class="btn primary" href="#/new">' + icon('plus') + 'محضر جديد</a>'));
+      : returned.length ? '' : emptyState('لا توجد محاضر بعد. ابدأ بإنشاء أول محضر، أو حمّل أمثلة لاستعراض سير العمل.', '<div class="btn-row" style="justify-content:center"><a class="btn primary" href="#new">' + icon('plus') + 'محضر جديد</a>' + sampleBtn() + '</div>')) +
+    samplesNote();
   return 'الرئيسية';
 }
 
@@ -535,9 +618,9 @@ function renderReports(view, f) {
   const filt = R_FILTERS.find(x => x[0] === f) || R_FILTERS[0];
   const all = sortRecent(readCases());
   view.innerHTML =
-    '<div class="page-head"><div><p class="eyebrow">بوابة المفتش</p><h1>تقاريري</h1></div><a class="btn primary" href="#/new">' + icon('plus') + 'محضر جديد</a></div>' +
+    '<div class="page-head"><div><p class="eyebrow">بوابة المفتش</p><h1>تقاريري</h1></div><a class="btn primary" href="#new">' + icon('plus') + 'محضر جديد</a></div>' +
     '<nav class="filters" aria-label="تصفية حسب الحالة">' + R_FILTERS.map(x =>
-      '<a href="#/reports/' + x[0] + '"' + (x === filt ? ' aria-current="true"' : '') + '>' + x[1] + ' <span class="count">(' + all.filter(x[2]).length + ')</span></a>').join('') + '</nav>' +
+      '<a href="#reports-' + x[0] + '"' + (x === filt ? ' aria-current="true"' : '') + '>' + x[1] + ' <span class="count">(' + all.filter(x[2]).length + ')</span></a>').join('') + '</nav>' +
     '<div class="search"><label class="sr-only" for="q">بحث في المحاضر</label>' + icon('search') + '<input id="q" type="search" data-search="reports" placeholder="بحث برقم المحضر أو الموقع أو المخالف" autocomplete="off"></div>' +
     '<div id="reportList" aria-live="polite"></div>';
   view.dataset.filter = filt[0];
@@ -557,17 +640,17 @@ function fillReportList() {
  * ------------------------------------------------------------------ */
 function renderInspectorView(view, id) {
   const c = getCase(id);
-  if (!c) { view.innerHTML = notFound('#/reports'); return 'غير موجود'; }
+  if (!c) { view.innerHTML = notFound('#reports'); return 'غير موجود'; }
   const s = detailSections(c);
   const ret = latestReturn(c);
   let banner = '';
-  if (c.status === 'returned') banner = '<div class="msg warn" style="margin-bottom:14px">' + icon('alert') + '<div><strong>أعادت الإدارة هذا المحضر للتعديل</strong>' + esc(ret ? ret.text : '') + '<div style="margin-top:10px"><a class="btn primary" href="#/edit/' + enc(c.id) + '">' + icon('edit') + 'فتح وتعديل ثم إعادة التسليم</a></div></div></div>';
+  if (c.status === 'returned') banner = '<div class="msg warn" style="margin-bottom:14px">' + icon('alert') + '<div><strong>أعادت الإدارة هذا المحضر للتعديل</strong>' + esc(ret ? ret.text : '') + '<div style="margin-top:10px"><a class="btn primary" href="#edit-' + enc(c.id) + '">' + icon('edit') + 'فتح وتعديل ثم إعادة التسليم</a></div></div></div>';
   else if (c.status === 'approved') banner = '<div class="msg ok" style="margin-bottom:14px">' + icon('check') + '<div><strong>محضر معتمد — للقراءة فقط</strong>لا يمكن تعديل المحضر بعد اعتماده.</div></div>';
   else if (PENDING.includes(c.status)) banner = '<div class="msg info" style="margin-bottom:14px">' + icon('info') + '<div><strong>المحضر قيد المراجعة</strong>لا يمكن التعديل أثناء المراجعة. سيظهر هنا أي إرجاع أو اعتماد. (المراجعة تجريبية على هذا الجهاز ولم يُرسل المحضر إلى الوزارة.)</div></div>';
-  else if (c.status === 'draft') banner = '<div class="msg info" style="margin-bottom:14px">' + icon('device') + '<div><strong>مسودة محفوظة محلياً</strong><a class="btn primary" style="margin-top:8px" href="#/edit/' + enc(c.id) + '">متابعة التحرير</a></div></div>';
+  else if (c.status === 'draft') banner = '<div class="msg info" style="margin-bottom:14px">' + icon('device') + '<div><strong>مسودة محفوظة محلياً</strong><a class="btn primary" style="margin-top:8px" href="#edit-' + enc(c.id) + '">متابعة التحرير</a></div></div>';
   view.innerHTML =
-    '<div class="page-head"><div><a class="back-link" href="#/reports">' + icon('prev') + 'العودة إلى تقاريري</a><h1>محضر ' + ltr(c.id) + '</h1></div>' +
-    '<div class="btn-row"><button class="btn secondary" type="button" data-action="print" data-id="' + esc(c.id) + '">' + icon('print') + 'طباعة / PDF</button></div></div>' +
+    '<div class="page-head"><div><a class="back-link" href="#reports">' + icon('prev') + 'العودة إلى تقاريري</a><h1>محضر ' + ltr(c.id) + '</h1></div>' +
+    '<div class="btn-row">' + printButton(c.id) + '</div></div>' +
     banner +
     '<div class="stack">' + s.info + s.viol + s.off + s.ev + s.rets + s.hist + '</div>';
   return 'محضر ' + c.id;
@@ -599,8 +682,8 @@ function renderWizard(view, id) {
   let rec = null;
   if (id) {
     rec = getCase(id);
-    if (!rec) { view.innerHTML = notFound('#/reports'); return 'غير موجود'; }
-    if (!EDITABLE.includes(rec.status)) { location.replace('#/view/' + enc(id)); return 'محضر'; }
+    if (!rec) { view.innerHTML = notFound('#reports'); return 'غير موجود'; }
+    if (!EDITABLE.includes(rec.status)) { location.replace('#view-' + enc(id)); return 'محضر'; }
   }
   const d = rec ? dataFromCase(rec) : blankData();
   W = {
@@ -642,7 +725,7 @@ function wizardHTML(rec) {
   '<div class="wiz-head">' +
     '<div class="row"><div><p class="eyebrow">' + (rec ? (rec.status === 'returned' ? 'تعديل محضر معاد' : 'متابعة مسودة') + ' · ' + ltr(rec.id) : 'محضر ضبط جديد') + '</p>' +
     '<h1 id="wizTitle">' + (rec ? 'تعديل المحضر' : 'محضر جديد') + '</h1></div>' +
-    '<a class="btn ghost sm" href="#/home">حفظ والخروج</a></div>' +
+    '<a class="btn ghost sm" href="#home">حفظ والخروج</a></div>' +
     '<div class="row"><span id="saveState" class="save-state" role="status" aria-live="polite"></span></div>' +
   '</div>' +
   (ret ? '<div class="msg warn returned-banner">' + icon('alert') + '<div><strong>سبب الإرجاع من الإدارة</strong>' + esc(ret.text) +
@@ -677,8 +760,9 @@ function wizardHTML(rec) {
         '<div class="field"><label for="f-lng">خط الطول (Longitude)</label><input id="f-lng" type="text" class="num-input" inputmode="decimal" data-f="lng" value="' + esc(W.raw.lng) + '" placeholder="51.531040" autocomplete="off" spellcheck="false"></div>' +
         '<div class="field acc"><label for="f-acc">الدقة (متر)</label><input id="f-acc" type="text" class="num-input" readonly value="' + (d.accuracy != null ? '±' + Math.round(d.accuracy) : '') + '" placeholder="تُعبأ تلقائياً من GPS" aria-describedby="accHint"><p class="hint" id="accHint">تُحدَّد تلقائياً عند استخدام موقع الجهاز.</p></div>' +
       '</div>' +
+      (EMBEDDED ? '<p class="hint">في نسخة العرض المضمّنة قد يمنع المتصفح الوصول إلى موقع الجهاز. افتح الملف مباشرة في المتصفح لاستخدام GPS، أو أدخل الإحداثيات يدوياً.</p>' : '') +
       '<div class="loc-actions">' +
-        '<button class="btn secondary" type="button" data-action="open-map" id="mapBtn">' + icon('map') + 'تحديد على الخريطة</button>' +
+        (EMBEDDED ? '' : '<button class="btn secondary" type="button" data-action="open-map" id="mapBtn">' + icon('map') + 'تحديد على الخريطة</button>') +
         '<button class="btn ghost" type="button" data-action="clear-loc">' + icon('close') + 'مسح الإحداثيات</button>' +
       '</div>' +
       '<div class="map-box" id="mapBox" hidden><div class="map" id="map" role="application" aria-label="خريطة لتحديد موقع المخالفة"></div><p class="map-hint" id="mapHint">اضغط على الخريطة لوضع علامة موقع المخالفة. موقع الخريطة الافتراضي لا يُعتبر موقعاً محدداً.</p></div>' +
@@ -845,7 +929,7 @@ function saveNow() {
   W.id = out.id;
   setSaveState('saved', now);
   if (isNew) {
-    history.replaceState(null, '', '#/edit/' + enc(out.id));
+    history.replaceState(null, '', '#edit-' + enc(out.id));
     const eb = $('#wizard .eyebrow');
     if (eb) eb.innerHTML = 'مسودة · ' + ltr(out.id);
   }
@@ -1264,16 +1348,18 @@ function goStep(target) {
   saveNow();
   setStep(target);
 }
-function submitWizard() {
+async function submitWizard() {
   for (const s of [1, 2, 3]) {
     const e = validateStep(s);
     if (e.length) { if (s !== W.step) setStep(s); showErrors(s, e); return; }
   }
   showErrors(3, []);
   const resub = W.status === 'returned';
-  const ok = window.confirm((resub ? 'إعادة تسليم المحضر للمراجعة؟' : 'تسليم المحضر للمراجعة؟') +
-    '\n\nسيُنقل المحضر إلى قائمة المراجعة على هذا الجهاز ولن يمكن تعديله إلا إذا أعادته الإدارة.\nملاحظة: هذه نسخة تجريبية — لا يتم الإرسال إلى الوزارة.');
-  if (!ok) return;
+  const wizard = W;
+  const ok = await askConfirm(resub ? 'إعادة تسليم المحضر للمراجعة؟' : 'تسليم المحضر للمراجعة؟',
+    'سيُنقل المحضر إلى قائمة المراجعة على هذا الجهاز ولن يمكن تعديله إلا إذا أعادته الإدارة. هذه نسخة تجريبية: لا يتم الإرسال إلى الوزارة.',
+    resub ? 'إعادة التسليم' : 'تسليم للمراجعة');
+  if (!ok || W !== wizard) return;
   if (!saveNow()) { toast('تعذر حفظ المحضر محلياً. لم يتم التسليم.', 'bad'); return; }
   const c = clone(getCase(W.id));
   const now = new Date().toISOString();
@@ -1286,7 +1372,7 @@ function submitWizard() {
   clearTimeout(W.saveTimer); W.saveTimer = null;
   leaveWizard();
   toast(resub ? 'أعيد تسليم المحضر للمراجعة على هذا الجهاز. لم يُرسل إلى الوزارة.' : 'تم تسليم المحضر للمراجعة على هذا الجهاز. لم يُرسل إلى الوزارة.');
-  location.hash = '#/view/' + enc(id);
+  location.hash = '#view-' + enc(id);
 }
 
 /* ------------------------------------------------------------------ *
@@ -1297,7 +1383,7 @@ function adminTable(list) {
   return '<div class="table-wrap"><table class="rows"><caption class="sr-only">قائمة المحاضر</caption><thead><tr>' +
     '<th scope="col">رقم المحضر</th><th scope="col">تاريخ الضبط</th><th scope="col">الموقع</th><th scope="col">المخالف</th><th scope="col">المخالفات</th><th scope="col">الحالة</th><th scope="col"><span class="sr-only">إجراء</span></th></tr></thead><tbody>' +
     list.map(c => '<tr' + (c.status === 'returned' ? ' class="is-returned"' : '') + '><td>' + ltr(c.id) + '</td><td>' + fmtDate(c.date) + '</td><td>' + locText(c) + '</td><td>' + esc(c.person || '—') + '</td><td>' + (c.violationNos.length ? ltr(c.violationNos.join(', ')) : '—') + '</td><td>' + badge(c.status) + '</td>' +
-      '<td><a class="btn ' + (PENDING.includes(c.status) ? 'primary' : 'secondary') + ' sm" href="#/admin/review/' + enc(c.id) + '">' + (PENDING.includes(c.status) ? 'مراجعة' : 'عرض') + '</a></td></tr>').join('') +
+      '<td><a class="btn ' + (PENDING.includes(c.status) ? 'primary' : 'secondary') + ' sm" href="#admin-review-' + enc(c.id) + '">' + (PENDING.includes(c.status) ? 'مراجعة' : 'عرض') + '</a></td></tr>').join('') +
     '</tbody></table></div>';
 }
 function adminCollection(list, emptyText) {
@@ -1311,13 +1397,14 @@ function renderAdminHome(view) {
   view.innerHTML =
     '<div class="page-head"><div><p class="eyebrow">بوابة الإدارة</p><h1>لوحة الإدارة</h1><p class="lead">مراجعة المحاضر المسلّمة واعتمادها أو إرجاعها للمفتش.</p></div></div>' +
     '<div class="stats four" role="list">' +
-      '<a role="listitem" class="stat st-review" href="#/admin/inbox/submitted"><span class="stat-label">بانتظار المراجعة</span><strong>' + n('submitted') + '</strong></a>' +
-      '<a role="listitem" class="stat st-review2" href="#/admin/inbox/resubmitted"><span class="stat-label">أعيد تسليمها</span><strong>' + n('resubmitted') + '</strong></a>' +
-      '<a role="listitem" class="stat st-action" href="#/admin/inbox/returned"><span class="stat-label">معادة للمفتش</span><strong>' + n('returned') + '</strong></a>' +
-      '<a role="listitem" class="stat st-ok" href="#/admin/inbox/approved"><span class="stat-label">معتمدة</span><strong>' + n('approved') + '</strong></a>' +
+      '<a role="listitem" class="stat st-review" href="#admin-inbox-submitted"><span class="stat-label">بانتظار المراجعة</span><strong>' + n('submitted') + '</strong></a>' +
+      '<a role="listitem" class="stat st-review2" href="#admin-inbox-resubmitted"><span class="stat-label">أعيد تسليمها</span><strong>' + n('resubmitted') + '</strong></a>' +
+      '<a role="listitem" class="stat st-action" href="#admin-inbox-returned"><span class="stat-label">معادة للمفتش</span><strong>' + n('returned') + '</strong></a>' +
+      '<a role="listitem" class="stat st-ok" href="#admin-inbox-approved"><span class="stat-label">معتمدة</span><strong>' + n('approved') + '</strong></a>' +
     '</div>' +
-    '<div class="sec-head"><h2>تحتاج قراراً (' + pending.length + ')</h2><a href="#/admin/inbox">صندوق المحاضر</a></div>' +
-    adminCollection(pending, 'لا توجد محاضر بانتظار المراجعة حالياً.') +
+    '<div class="sec-head"><h2>تحتاج قراراً (' + pending.length + ')</h2><a href="#admin-inbox">صندوق المحاضر</a></div>' +
+    (pending.length ? adminCollection(pending, '') : emptyState('لا توجد محاضر بانتظار المراجعة حالياً.', list.length ? '' : sampleBtn())) +
+    samplesNote() +
     '<div class="legal-note" style="margin-top:16px">' + icon('info') + '<span>' + LEGAL_NOTE + '</span></div>';
   return 'لوحة الإدارة';
 }
@@ -1335,7 +1422,7 @@ function renderAdminInbox(view, f) {
   view.innerHTML =
     '<div class="page-head"><div><p class="eyebrow">بوابة الإدارة</p><h1>صندوق المحاضر</h1></div></div>' +
     '<nav class="filters" aria-label="تصفية حسب الحالة">' + A_FILTERS.map(x =>
-      '<a href="#/admin/inbox/' + x[0] + '"' + (x === filt ? ' aria-current="true"' : '') + '>' + x[1] + ' <span class="count">(' + all.filter(x[2]).length + ')</span></a>').join('') + '</nav>' +
+      '<a href="#admin-inbox-' + x[0] + '"' + (x === filt ? ' aria-current="true"' : '') + '>' + x[1] + ' <span class="count">(' + all.filter(x[2]).length + ')</span></a>').join('') + '</nav>' +
     '<div class="search"><label class="sr-only" for="q">بحث في المحاضر</label>' + icon('search') + '<input id="q" type="search" data-search="admin" placeholder="بحث برقم المحضر أو الموقع أو المخالف" autocomplete="off"></div>' +
     '<div id="reportList" aria-live="polite"></div>';
   view.dataset.filter = filt[0];
@@ -1349,7 +1436,7 @@ function fillAdminList() {
 }
 function renderAdminReview(view, id) {
   const c = getCase(id);
-  if (!c || c.status === 'draft') { view.innerHTML = notFound('#/admin/inbox'); return 'غير موجود'; }
+  if (!c || c.status === 'draft') { view.innerHTML = notFound('#admin-inbox'); return 'غير موجود'; }
   const s = detailSections(c, { admin: true });
   let decision;
   if (PENDING.includes(c.status)) {
@@ -1367,9 +1454,9 @@ function renderAdminReview(view, id) {
     decision = '<div class="msg warn">' + icon('alert') + '<div><strong>المحضر معاد للمفتش</strong>بانتظار تعديله وإعادة تسليمه. لا يمكن اتخاذ قرار حالياً.</div></div>';
   }
   view.innerHTML =
-    '<div class="page-head"><div><a class="back-link" href="#/admin/inbox">' + icon('prev') + 'العودة إلى صندوق المحاضر</a>' +
+    '<div class="page-head"><div><a class="back-link" href="#admin-inbox">' + icon('prev') + 'العودة إلى صندوق المحاضر</a>' +
     '<h1>مراجعة محضر ' + ltr(c.id) + '</h1><div style="margin-top:6px">' + badge(c.status) + '</div></div>' +
-    '<div class="btn-row"><button class="btn secondary" type="button" data-action="print" data-id="' + esc(c.id) + '">' + icon('print') + 'طباعة / PDF</button></div></div>' +
+    '<div class="btn-row">' + printButton(c.id) + '</div></div>' +
     '<div class="review-layout">' +
       '<div class="review-main stack">' + s.info + s.viol + s.off + s.ev + s.rets + s.hist + '</div>' +
       '<aside class="review-side" aria-labelledby="decH"><section class="card decision"><h2 id="decH">القرار الإداري</h2>' + decision +
@@ -1378,7 +1465,7 @@ function renderAdminReview(view, id) {
     '</div>';
   return 'مراجعة محضر ' + c.id;
 }
-function decide(id, action) {
+async function decide(id, action) {
   const cur = getCase(id);
   if (!cur || !PENDING.includes(cur.status)) { toast('لا يمكن اتخاذ قرار: تغيرت حالة المحضر.', 'bad'); render(); return; }
   const noteEl = $('#decNote');
@@ -1390,11 +1477,13 @@ function decide(id, action) {
     noteEl.focus();
     return;
   }
-  const msg = action === 'approved'
-    ? 'اعتماد المحضر ' + id + '؟\nبعد الاعتماد يصبح المحضر للقراءة فقط.'
-    : 'إرجاع المحضر ' + id + ' للمفتش للتعديل؟';
-  if (!window.confirm(msg)) return;
-  const c = clone(cur);
+  const yes = action === 'approved'
+    ? await askConfirm('اعتماد المحضر ' + id + '؟', 'بعد الاعتماد يصبح المحضر للقراءة فقط ولا يمكن تعديله.', 'اعتماد المحضر')
+    : await askConfirm('إرجاع المحضر ' + id + ' للمفتش؟', 'سيظهر سبب الإرجاع للمفتش ويُحفظ في سجل الإجراءات.', 'إرجاع للمفتش', true);
+  if (!yes) return;
+  const latest = getCase(id);
+  if (!latest || !PENDING.includes(latest.status)) { toast('لا يمكن اتخاذ قرار: تغيرت حالة المحضر.', 'bad'); render(); return; }
+  const c = clone(latest);
   const now = new Date().toISOString();
   c.status = action;
   c.reviewedAt = now;
@@ -1444,6 +1533,9 @@ function paperHTML(c) {
     '<p class="p-note">نموذج تجريبي غير معتمد — بيانات محفوظة محلياً ولم تُرسل إلى الوزارة. ' + LEGAL_NOTE + '</p>' +
   '</article>';
 }
+function printButton(id) {
+  return EMBEDDED ? '' : '<button class="btn secondary" type="button" data-action="print" data-id="' + esc(id) + '">' + icon('print') + 'طباعة / PDF</button>';
+}
 function printCase(id) {
   const c = getCase(id);
   if (!c) return;
@@ -1475,12 +1567,16 @@ document.addEventListener('click', e => {
     }
     case 'delete-draft': {
       const c = getCase(t.dataset.id);
-      if (c && c.status === 'draft' && window.confirm('حذف المسودة ' + c.id + ' نهائياً من هذا الجهاز؟')) {
+      if (!c || c.status !== 'draft') break;
+      askConfirm('حذف المسودة؟', 'سيتم حذف المسودة ' + c.id + ' نهائياً من هذا الجهاز.', 'حذف المسودة', true).then(yes => {
+        if (!yes) return;
         try { removeCase(c.id); toast('تم حذف المسودة.'); } catch (err) { toast('تعذر الحذف.', 'bad'); }
         render();
-      }
+      });
       break;
     }
+    case 'load-samples': loadSamples(); break;
+    case 'remove-samples': removeSamples(); break;
     case 'approve': decide(t.dataset.id, 'approved'); break;
     case 'return': decide(t.dataset.id, 'returned'); break;
     case 'focus-field': {
@@ -1519,15 +1615,20 @@ document.addEventListener('click', e => {
       break;
     }
     case 'del-photo': {
-      const i = W.d.photos.findIndex(p => p.id === t.dataset.id);
-      if (i < 0) break;
-      if (!window.confirm('حذف الصورة ' + (i + 1) + '؟')) break;
+      const pid = t.dataset.id, wizard = W;
+      const i0 = W.d.photos.findIndex(p => p.id === pid);
+      if (i0 < 0) break;
+      askConfirm('حذف الصورة ' + (i0 + 1) + '؟', 'لا يمكن التراجع عن الحذف.', 'حذف الصورة', true).then(yes => {
+      if (!yes || W !== wizard) return;
+      const i = W.d.photos.findIndex(p => p.id === pid);
+      if (i < 0) return;
       W.d.photos.splice(i, 1);
       renderPhotos();
       saveNow();
       $('#photoMsg').innerHTML = '<p class="sr-only">تم حذف الصورة.</p>';
       const next = $$('#photoList [data-action="del-photo"]')[Math.min(i, W.d.photos.length - 1)];
       (next || $('#camBtn')).focus();
+      });
       break;
     }
   }
@@ -1573,7 +1674,14 @@ $('.side-head .icon-btn').innerHTML = icon('close', 'ic-lg');
 $('#viewer .icon-btn').innerHTML = icon('close', 'ic-lg');
 updateNet();
 updateStorageUse();
-if (!location.hash) history.replaceState(null, '', '#/home');
+if (!location.hash) history.replaceState(null, '', '#home');
+// In an embedded viewer, open with marked example reports the first time so the workflow is visible.
+try {
+  if (EMBEDDED && !readCases().length && !localStorage.getItem(SAMPLE_FLAG)) {
+    writeCases(sampleCases().map(normalize));
+    localStorage.setItem(SAMPLE_FLAG, '1');
+  }
+} catch (e) { /* storage unavailable: start empty */ }
 render();
 
 })();
