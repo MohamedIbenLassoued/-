@@ -94,6 +94,7 @@ const OFFENDER_TYPE = { person: 'شخص', company: 'شركة' };
 const PHOTO_CAT = { field: 'صورة ميدانية', support: 'دليل داعم' };
 const LOC_SOURCE = { gps: 'GPS الجهاز', map: 'تحديد على الخريطة', manual: 'إدخال يدوي' };
 const STEPS = ['الموقع والزمان', 'المخالفات والأدلة', 'بيانات المخالف والمراجعة'];
+const STEPS_SHORT = ['الموقع', 'المخالفات', 'المخالف'];
 
 const LEGAL_NOTE = 'العقوبات والإشارات القانونية معروضة للاطلاع فقط. لا يحتسب النظام أي غرامة، ولا يقرر الإدانة، ولا يطبق أي عقوبة؛ القرار القانوني يصدر بعد المراجعة الرسمية من الجهة المختصة.';
 const SIGN_NOTE = 'تسجيل حالة التوقيع إجراء توثيقي فقط، ولا يُعد توقيع المخالف أو رفضه للتوقيع إقراراً بالمخالفة أو نفياً لها.';
@@ -689,7 +690,7 @@ function renderWizard(view, id) {
   W = {
     id: rec ? rec.id : null, status: rec ? rec.status : 'draft', step: 1, d,
     raw: { lat: d.lat != null ? String(d.lat) : '', lng: d.lng != null ? String(d.lng) : '' },
-    saveTimer: null, map: null, marker: null, busy: false, maxStep: rec ? 3 : 1
+    saveTimer: null, map: null, marker: null, busy: false, maxStep: rec ? 3 : 1, tried: false, errSteps: new Set()
   };
   if (needsChips() && !W.d.chips.length) W.d.chips = [''];
   document.body.classList.add('in-wizard');
@@ -734,8 +735,8 @@ function wizardHTML(rec) {
   '</div></div>' : '') +
   '<nav class="stepper" aria-label="خطوات المحضر">' +
     '<div class="stepper-compact"><span class="now" id="stepNow">الخطوة 1 من 3</span><span class="name" id="stepName">' + STEPS[0] + '</span></div>' +
-    '<div class="bar" aria-hidden="true"><span></span><span></span><span></span></div>' +
-    '<ol class="step-pills">' + STEPS.map((s, i) => '<li><button type="button" data-action="go-step" data-step="' + (i + 1) + '"><span class="n">' + (i + 1) + '</span><span>' + s + '</span></button></li>').join('') + '</ol>' +
+    '<ol class="step-pills">' + STEPS.map((s, i) => '<li><button type="button" data-action="go-step" data-step="' + (i + 1) + '"><span class="n">' + (i + 1) + '</span><span class="lbl-long">' + s + '</span><span class="lbl-short">' + STEPS_SHORT[i] + '</span></button></li>').join('') + '</ol>' +
+    '<p class="hint step-hint">يمكنك التنقل بين الخطوات بحرية؛ يتم التحقق من اكتمال البيانات عند التسليم.</p>' +
   '</nav>' +
 
   /* ---------- STEP 1 ---------- */
@@ -753,14 +754,13 @@ function wizardHTML(rec) {
     '</div>' +
     '<div class="card" id="locCard">' +
       '<div class="card-head"><h3 id="locH">موقع المخالفة <span class="req">*</span></h3><span id="locBadge"></span></div>' +
-      '<button class="btn primary block lg" type="button" id="locBtn" data-action="locate">' + icon('locate') + '<span>استخدام موقعي</span></button>' +
+      '<button class="btn primary lg loc-btn" type="button" id="locBtn" data-action="locate">' + icon('locate') + '<span>استخدام موقعي</span></button>' +
       '<div id="locMsg" role="status" aria-live="polite"></div>' +
       '<div class="coord-grid">' +
         '<div class="field"><label for="f-lat">خط العرض (Latitude)</label><input id="f-lat" type="text" class="num-input" inputmode="decimal" data-f="lat" value="' + esc(W.raw.lat) + '" placeholder="25.285447" autocomplete="off" spellcheck="false"></div>' +
         '<div class="field"><label for="f-lng">خط الطول (Longitude)</label><input id="f-lng" type="text" class="num-input" inputmode="decimal" data-f="lng" value="' + esc(W.raw.lng) + '" placeholder="51.531040" autocomplete="off" spellcheck="false"></div>' +
         '<div class="field acc"><label for="f-acc">الدقة (متر)</label><input id="f-acc" type="text" class="num-input" readonly value="' + (d.accuracy != null ? '±' + Math.round(d.accuracy) : '') + '" placeholder="تُعبأ تلقائياً من GPS" aria-describedby="accHint"><p class="hint" id="accHint">تُحدَّد تلقائياً عند استخدام موقع الجهاز.</p></div>' +
       '</div>' +
-      (EMBEDDED ? '<p class="hint">في نسخة العرض المضمّنة قد يمنع المتصفح الوصول إلى موقع الجهاز. افتح الملف مباشرة في المتصفح لاستخدام GPS، أو أدخل الإحداثيات يدوياً.</p>' : '') +
       '<div class="loc-actions">' +
         (EMBEDDED ? '' : '<button class="btn secondary" type="button" data-action="open-map" id="mapBtn">' + icon('map') + 'تحديد على الخريطة</button>') +
         '<button class="btn ghost" type="button" data-action="clear-loc">' + icon('close') + 'مسح الإحداثيات</button>' +
@@ -849,11 +849,11 @@ function setStep(n, initial) {
   [1, 2, 3].forEach(i => { $('#panel' + i).hidden = i !== n; });
   $('#stepNow').textContent = 'الخطوة ' + n + ' من 3';
   $('#stepName').textContent = STEPS[n - 1];
-  $$('.stepper .bar span').forEach((s, i) => { s.className = i + 1 < n ? 'done' : i + 1 === n ? 'on' : ''; });
   $$('.step-pills button').forEach((b, i) => {
     if (i + 1 === n) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
-    b.classList.toggle('done', i + 1 < n);
-    b.setAttribute('aria-label', 'الخطوة ' + (i + 1) + ': ' + STEPS[i] + (i + 1 < n ? ' (مكتملة)' : ''));
+    const bad = W.tried && W.errSteps.has(i + 1);
+    b.classList.toggle('has-err', bad);
+    b.setAttribute('aria-label', 'الخطوة ' + (i + 1) + ': ' + STEPS[i] + (bad ? ' (بيانات ناقصة)' : ''));
   });
   $('#prevBtn').hidden = n === 1;
   $('#nextBtn').hidden = n === 3;
@@ -969,12 +969,14 @@ function onWizardField(t) {
     if (f === 'offenderType') updateOffenderLabels();
     if (f === 'place') renderLocStatus();
     scheduleSave();
+    refreshValidation();
   } else if (t.matches('[data-v]')) {
     toggleViolation(Number(t.dataset.v), t.checked);
   } else if (t.matches('[data-chip]')) {
     W.d.chips[Number(t.dataset.chip)] = t.value;
     t.removeAttribute('aria-invalid');
     scheduleSave();
+    refreshValidation();
   } else if (t.matches('[data-pf]')) {
     const ph = W.d.photos.find(p => p.id === t.dataset.id);
     if (!ph) return;
@@ -992,6 +994,7 @@ function updateOffenderLabels() {
 
 /* ---------- violations & chip numbers ---------- */
 function toggleViolation(no, on) {
+  setTimeout(refreshValidation, 0);
   const set = new Set(W.d.violationNos);
   if (on) set.add(no); else set.delete(no);
   W.d.violationNos = Array.from(set).sort((a, b) => a - b);
@@ -1057,6 +1060,7 @@ function setLocation(lat, lng, acc, src) {
   renderLocStatus();
   syncMarker(src !== 'map');
   scheduleSave();
+  refreshValidation();
 }
 function useMyLocation() {
   const btn = $('#locBtn');
@@ -1072,15 +1076,16 @@ function useMyLocation() {
   btn.setAttribute('aria-busy', 'true');
   btn.querySelector('span').textContent = 'جارٍ تحديد الموقع…';
   locMsg('info', 'جارٍ الحصول على موقعك من GPS… قد يستغرق ذلك حتى 20 ثانية. يُفضّل الوقوف في مكان مكشوف.');
-  const done = () => {
-    if (!W) return false;
+  const wizard = W;
+  const done = ok => {
+    if (W !== wizard) return false;
     btn.disabled = false;
     btn.removeAttribute('aria-busy');
-    btn.querySelector('span').textContent = 'تحديث موقعي';
+    btn.querySelector('span').textContent = ok ? 'تحديث موقعي' : 'استخدام موقعي';
     return true;
   };
   navigator.geolocation.getCurrentPosition(pos => {
-    if (!done()) return;
+    if (!done(true)) return;
     const { latitude, longitude, accuracy } = pos.coords;
     setLocation(latitude, longitude, accuracy, 'gps');
     const acc = Math.round(accuracy);
@@ -1088,7 +1093,13 @@ function useMyLocation() {
     else locMsg('ok', 'تم تحديد موقعك بدقة تقارب ±' + acc + ' متر.');
     if (!inQatar(latitude, longitude)) locMsg('warn', '<strong>الموقع خارج حدود دولة قطر</strong>تحقق من صحة الموقع قبل المتابعة.');
   }, err => {
-    if (!done()) return;
+    if (!done(false)) return;
+    if (EMBEDDED && err.code === 1) {
+      // Device location is blocked by the hosting viewer itself, not by the inspector's settings.
+      locMsg('info', '<strong>تحديد الموقع التلقائي غير متاح في نسخة العرض هذه</strong>أدخل خط العرض وخط الطول يدوياً (يمكن نسخهما من تطبيق الخرائط في الهاتف)، أو اكتب وصفاً للموقع. يعمل GPS عند فتح ملف التطبيق مباشرة في المتصفح.');
+      const lat = $('#f-lat'); if (lat && !lat.value) lat.focus();
+      return;
+    }
     const M = {
       1: '<strong>تم رفض إذن الوصول إلى الموقع</strong>فعّل إذن الموقع لهذا المتصفح من إعدادات الجهاز ثم اضغط «استخدام موقعي» مرة أخرى، أو أدخل الإحداثيات يدوياً.',
       2: '<strong>تعذر تحديد الموقع حالياً</strong>إشارة GPS غير متوفرة. تأكد من تفعيل خدمة الموقع في الجهاز، أو انتقل إلى مكان مكشوف، أو أدخل الإحداثيات يدوياً.',
@@ -1305,16 +1316,34 @@ function validateStep(s) {
   }
   return e;
 }
-function showErrors(step, errs) {
+function showErrors(step, errs, quiet) {
   $$('[aria-invalid="true"]', $('#panel' + step)).forEach(x => x.removeAttribute('aria-invalid'));
   const box = $('#err' + step);
   if (!errs.length) { box.innerHTML = ''; return; }
   errs.forEach(x => { const el = document.getElementById(x.f); if (el && el.tagName !== 'BUTTON') el.setAttribute('aria-invalid', 'true'); });
   box.innerHTML = '<div class="error-summary" role="alert" tabindex="-1"><h2>يرجى استكمال ما يلي:</h2><ul>' +
     errs.map(x => '<li><button type="button" data-action="focus-field" data-f="' + esc(x.f) + '">' + esc(x.m) + '</button></li>').join('') + '</ul></div>';
+  if (quiet) { $('.error-summary', box).removeAttribute('role'); return; }
   const s = $('.error-summary', box);
   s.scrollIntoView({ block: 'center' });
   s.focus({ preventScroll: true });
+}
+/* After a failed submit, keep each step's error list and step markers current as the inspector fixes them. */
+function refreshValidation() {
+  if (!W || !W.tried) return;
+  W.errSteps = new Set();
+  [1, 2, 3].forEach(s => {
+    const e = validateStep(s);
+    if (e.length) W.errSteps.add(s);
+    const box = $('#err' + s);
+    if (!e.length) box.innerHTML = '';
+    else if (box.innerHTML) showErrors(s, e, true);
+  });
+  $$('.step-pills button').forEach((b, i) => {
+    const bad = W.errSteps.has(i + 1);
+    b.classList.toggle('has-err', bad);
+    b.setAttribute('aria-label', 'الخطوة ' + (i + 1) + ': ' + STEPS[i] + (bad ? ' (بيانات ناقصة)' : ''));
+  });
 }
 
 /* ---------- review (step 3) ---------- */
@@ -1338,22 +1367,23 @@ function renderReview() {
 
 /* ---------- step navigation & submit ---------- */
 function goStep(target) {
-  if (target === W.step) return;
-  if (target < W.step) { showErrors(W.step, []); setStep(target); return; }
-  for (let s = W.step; s < target; s++) {
-    const e = validateStep(s);
-    if (e.length) { if (s !== W.step) setStep(s); showErrors(s, e); return; }
-    showErrors(s, []);
-  }
-  saveNow();
+  if (target === W.step || target < 1 || target > 3) return;
+  if (W.saveTimer) saveNow();
   setStep(target);
 }
 async function submitWizard() {
-  for (const s of [1, 2, 3]) {
-    const e = validateStep(s);
-    if (e.length) { if (s !== W.step) setStep(s); showErrors(s, e); return; }
+  W.tried = true;
+  W.errSteps = new Set();
+  const all = [1, 2, 3].map(s => validateStep(s));
+  all.forEach((e, i) => { if (e.length) W.errSteps.add(i + 1); showErrors(i + 1, e, true); });
+  const first = all.findIndex(e => e.length);
+  if (first >= 0) {
+    const total = all.reduce((n, e) => n + e.length, 0);
+    if (first + 1 !== W.step) setStep(first + 1); else setStep(W.step, true);
+    showErrors(first + 1, all[first]);
+    toast('لا يمكن التسليم: ' + total + (total === 1 ? ' بيان ناقص' : ' بيانات ناقصة') + '. الخطوات المعلّمة بالأحمر تحتاج استكمال.', 'bad');
+    return;
   }
-  showErrors(3, []);
   const resub = W.status === 'returned';
   const wizard = W;
   const ok = await askConfirm(resub ? 'إعادة تسليم المحضر للمراجعة؟' : 'تسليم المحضر للمراجعة؟',
