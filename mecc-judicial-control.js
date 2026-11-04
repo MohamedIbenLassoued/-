@@ -226,6 +226,7 @@ function normalize(raw) {
   c.chips = (Array.isArray(c.chips) ? c.chips : []).map(x => String(x)).filter(x => x.trim());
   c.offenderType = c.offenderType === 'company' ? 'company' : 'person';
   c.signature = SIGNATURE[c.signature] ? c.signature : 'unspecified';
+  ['offenderSig', 'inspectorSig'].forEach(k => { c[k] = typeof c[k] === 'string' && c[k].indexOf('data:image/') === 0 ? c[k] : ''; });
   c.settlement = Object.prototype.hasOwnProperty.call(SETTLEMENT, c.settlement || '') ? (c.settlement || '') : '';
   ['date', 'time', 'place', 'notes', 'person', 'qid', 'phone', 'address', 'section', 'inspectorName', 'inspectorNo', 'managerNote'].forEach(k => { c[k] = c[k] == null ? '' : String(c[k]); });
   ['lat', 'lng', 'accuracy'].forEach(k => { c[k] = (c[k] === null || c[k] === undefined || c[k] === '') ? null : Number(c[k]); if (Number.isNaN(c[k])) c[k] = null; });
@@ -488,14 +489,19 @@ function detailSections(c, opts) {
   '</section>';
 
   const off = '<section class="card" aria-labelledby="sec-off"><h2 id="sec-off" class="review-sec-head">بيانات المخالف</h2>' + kvRows([
-    ['نوع المخالف', OFFENDER_TYPE[c.offenderType]],
-    [c.offenderType === 'company' ? 'اسم الشركة' : 'الاسم', esc(c.person || '—')],
-    [c.offenderType === 'company' ? 'رقم السجل التجاري' : 'رقم الهوية', c.qid ? ltr(c.qid) : '—'],
+    c.offenderType === 'company' ? ['نوع المخالف', OFFENDER_TYPE[c.offenderType]] : null,
+    [c.offenderType === 'company' ? 'اسم الشركة' : 'اسم المخالف', esc(c.person || '—')],
+    [c.offenderType === 'company' ? 'رقم السجل التجاري' : 'رقم البطاقة الشخصية', c.qid ? ltr(c.qid) : '—'],
     ['الهاتف', c.phone ? ltr(c.phone) : '—'],
     ['العنوان', esc(c.address || '—')],
     ['عرض الصلح', esc(SETTLEMENT[c.settlement])],
     ['حالة التوقيع', esc(SIGNATURE[c.signature])]
-  ]) + '<p class="hint">' + SIGN_NOTE + '</p></section>';
+  ]) +
+  '<div class="sig-view">' +
+    '<figure><figcaption>توقيع المخالف</figcaption>' + (c.offenderSig ? '<img src="' + esc(c.offenderSig) + '" alt="توقيع المخالف">' : '<span class="muted">' + (c.signature === 'refused' ? 'رفض التوقيع' : 'لا يوجد توقيع') + '</span>') + '</figure>' +
+    '<figure><figcaption>توقيع المفتش</figcaption>' + (c.inspectorSig ? '<img src="' + esc(c.inspectorSig) + '" alt="توقيع المفتش">' : '<span class="muted">لا يوجد توقيع</span>') + '</figure>' +
+  '</div>' +
+  '<p class="hint">' + SIGN_NOTE + '</p></section>';
 
   const ev = '<section class="card" aria-labelledby="sec-ev"><div class="review-sec-head"><h2 id="sec-ev">الأدلة والصور</h2><span class="counter">' + c.photos.length + ' / ' + MAX_PHOTOS + '</span></div>' +
     (c.photos.length ? '<div class="gallery">' + c.photos.map((ph, i) =>
@@ -534,7 +540,7 @@ function sampleCases() {
       returnComments: [{ text: 'يرجى إرفاق صورة لقارئ الشريحة الإلكترونية وتوضيح حدود المنطقة المحمية.', at: iso(1, 10), by: 'الإدارة' }],
       history: [{ action: 'created', at: iso(3, 7), by: 'مفتش تجريبي' }, { action: 'submitted', at: iso(3, 9), by: 'مفتش تجريبي' }, { action: 'returned', at: iso(1, 10), by: 'الإدارة', note: 'يرجى إرفاق صورة لقارئ الشريحة الإلكترونية وتوضيح حدود المنطقة المحمية.' }] }),
     Object.assign({}, base, { id: 'MECC-DEMO-0000002', status: 'submitted', date: day(1), time: '16:20', place: 'مثال: محيط روضة شمال الدوحة', lat: 25.62, lng: 51.41, accuracy: 15, locSource: 'gps',
-      violationNos: [10, 14], notes: 'مثال تجريبي: إشعال نار ومرور مركبة خارج المسار.', offenderType: 'company', person: 'شركة تجريبية (مثال)', qid: '00000', settlement: 'offered', signature: 'signed',
+      violationNos: [10, 14], notes: 'مثال تجريبي: إشعال نار ومرور مركبة خارج المسار.', person: 'مخالف تجريبي ثالث (مثال)', qid: '00000000002', settlement: 'offered', signature: 'signed',
       createdAt: iso(1, 16), updatedAt: iso(1, 17), submittedAt: iso(1, 17),
       returnComments: [], history: [{ action: 'created', at: iso(1, 16), by: 'مفتش تجريبي' }, { action: 'submitted', at: iso(1, 17), by: 'مفتش تجريبي' }] }),
     Object.assign({}, base, { id: 'MECC-DEMO-0000003', status: 'draft', date: day(0), time: '08:05', place: 'مثال: ساحل الغارية', lat: null, lng: null,
@@ -668,7 +674,8 @@ function blankData() {
     date: todayISO(), time: nowTime(), inspectorName: p.name || '', inspectorNo: p.no || '',
     place: '', lat: null, lng: null, accuracy: null, locSource: null, locAt: null,
     violationNos: [], chips: [], notes: '', photos: [],
-    offenderType: 'person', person: '', qid: '', phone: '', address: '', section: '', settlement: '', signature: 'unspecified'
+    offenderType: 'person', person: '', qid: '', phone: '', address: '', section: '', settlement: '', signature: 'unspecified',
+    offenderSig: '', inspectorSig: ''
   };
 }
 function dataFromCase(c) {
@@ -700,7 +707,6 @@ function renderWizard(view, id) {
   renderChips();
   renderPhotos();
   updateViolationUI();
-  updateOffenderLabels();
   setSaveState(rec ? 'saved' : 'idle', rec ? rec.updatedAt : null);
   setStep(1, true);
   return rec ? 'تعديل محضر ' + rec.id : 'محضر جديد';
@@ -814,12 +820,9 @@ function wizardHTML(rec) {
     '<div id="err3"></div>' +
     '<div class="card">' +
       '<h3 style="margin-bottom:12px">بيانات المخالف</h3>' +
-      '<fieldset class="field"><legend>نوع المخالف</legend><div class="seg lg">' +
-        Object.entries(OFFENDER_TYPE).map(([k, v]) => '<label><input type="radio" name="offenderType" data-f="offenderType" value="' + k + '"' + (d.offenderType === k ? ' checked' : '') + '>' + icon(k === 'company' ? 'grid' : 'user') + v + '</label>').join('') +
-      '</div></fieldset>' +
       '<div class="grid2">' +
-        '<div class="field"><label for="f-person" id="lblPerson">الاسم</label><input id="f-person" type="text" data-f="person" value="' + esc(d.person) + '" autocomplete="off"></div>' +
-        '<div class="field"><label for="f-qid" id="lblQid">رقم الهوية</label><input id="f-qid" type="text" class="num-input" inputmode="numeric" data-f="qid" value="' + esc(d.qid) + '" autocomplete="off" spellcheck="false"></div>' +
+        '<div class="field"><label for="f-person">اسم المخالف <span class="req">*</span></label><input id="f-person" type="text" data-f="person" value="' + esc(d.person) + '" autocomplete="off"></div>' +
+        '<div class="field"><label for="f-qid">رقم البطاقة الشخصية</label><input id="f-qid" type="text" class="num-input" inputmode="numeric" data-f="qid" value="' + esc(d.qid) + '" autocomplete="off" spellcheck="false"></div>' +
         '<div class="field"><label for="f-phone">الهاتف <span class="opt">(اختياري)</span></label><input id="f-phone" type="tel" class="num-input" inputmode="tel" data-f="phone" value="' + esc(d.phone) + '" placeholder="+974 5000 0000" autocomplete="off"></div>' +
         '<div class="field"><label for="f-section">القسم <span class="opt">(اختياري)</span></label><input id="f-section" type="text" data-f="section" value="' + esc(d.section) + '" placeholder="مثال: الشمال"></div>' +
       '</div>' +
@@ -827,9 +830,16 @@ function wizardHTML(rec) {
       '<div class="field"><label for="f-settle">عرض الصلح <span class="opt">(اختياري)</span></label><select id="f-settle" data-f="settlement">' +
         Object.entries(SETTLEMENT).map(([k, v]) => '<option value="' + k + '"' + (d.settlement === k ? ' selected' : '') + '>' + v + '</option>').join('') +
       '</select></div>' +
-      '<fieldset class="field"><legend>حالة التوقيع</legend><div class="opts">' +
+    '</div>' +
+    '<div class="card" id="sigCard">' +
+      '<h3 style="margin-bottom:12px">التوقيعات</h3>' +
+      '<fieldset class="field"><legend>حالة توقيع المخالف</legend><div class="opts">' +
         Object.entries(SIGNATURE).map(([k, v]) => '<label class="opt-card"><input type="radio" name="signature" data-f="signature" value="' + k + '"' + (d.signature === k ? ' checked' : '') + ' aria-describedby="signNote"><span class="radio" aria-hidden="true"></span>' + v + '</label>').join('') +
       '</div><p class="hint" id="signNote">' + SIGN_NOTE + '</p></fieldset>' +
+      '<div id="offSigBox"' + (d.signature === 'signed' ? '' : ' hidden') + '>' + sigPadHTML('offenderSig', 'توقيع المخالف', true) + '</div>' +
+      '<div id="refusedNote" class="msg warn"' + (d.signature === 'refused' ? '' : ' hidden') + '>' + icon('info') + '<div>سُجّل رفض المخالف للتوقيع. لا حاجة لتوقيع المخالف، ويُكتفى بتوقيع المفتش.</div></div>' +
+      '<hr class="divider">' +
+      sigPadHTML('inspectorSig', 'توقيع المفتش', true) +
     '</div>' +
     '<div class="card" id="reviewBox" aria-live="off"></div>' +
     '<div class="legal-note" style="margin-top:14px">' + icon('info') + '<span>' + LEGAL_NOTE + ' التسليم هنا ينقل المحضر إلى قائمة المراجعة على هذا الجهاز فقط ولا يرسله إلى الوزارة.</span></div>' +
@@ -859,7 +869,7 @@ function setStep(n, initial) {
   $('#prevBtn').hidden = n === 1;
   $('#nextBtn').hidden = n === 3;
   $('#submitBtn').hidden = n !== 3;
-  if (n === 3) renderReview();
+  if (n === 3) { renderReview(); setTimeout(mountPads, 0); }
   if (n === 1 && W.map) setTimeout(() => W && W.map && W.map.invalidateSize(), 60);
   if (!initial) {
     window.scrollTo(0, 0);
@@ -897,8 +907,9 @@ function serialize(d) {
     violations: d.violationNos.slice().sort((a, b) => a - b).map(n => VBY[n].text),
     chips: needsChips() ? d.chips.map(x => latinDigits(x).trim()).filter(Boolean) : [],
     notes: d.notes, photos: d.photos,
-    offenderType: d.offenderType, person: d.person.trim(), qid: latinDigits(d.qid).trim(), phone: latinDigits(d.phone).trim(),
-    address: d.address, settlement: d.settlement, signature: d.signature
+    offenderType: 'person', person: d.person.trim(), qid: latinDigits(d.qid).trim(), phone: latinDigits(d.phone).trim(),
+    address: d.address, settlement: d.settlement, signature: d.signature,
+    offenderSig: d.signature === 'signed' ? d.offenderSig : '', inspectorSig: d.inspectorSig
   };
 }
 function isEmptyDraft(d) {
@@ -938,6 +949,7 @@ function saveNow() {
 }
 function leaveWizard() {
   if (!W) return;
+  Object.keys(pads).forEach(k => delete pads[k]);
   if (W.saveTimer) saveNow();
   if (W.map) { try { W.map.remove(); } catch (e) { /* ignore */ } }
   W = null;
@@ -967,7 +979,11 @@ function onWizardField(t) {
       p[f === 'inspectorName' ? 'name' : 'no'] = t.value.trim();
       setProfile(p);
     }
-    if (f === 'offenderType') updateOffenderLabels();
+    if (f === 'signature') {
+      $('#offSigBox').hidden = t.value !== 'signed';
+      $('#refusedNote').hidden = t.value !== 'refused';
+      if (t.value === 'signed') mountPads();
+    }
     if (f === 'place') renderLocStatus();
     scheduleSave();
     refreshValidation();
@@ -986,12 +1002,99 @@ function onWizardField(t) {
     scheduleSave();
   }
 }
-function updateOffenderLabels() {
-  const co = W.d.offenderType === 'company';
-  $('#lblPerson').innerHTML = (co ? 'اسم الشركة' : 'اسم المخالف') + ' <span class="req">*</span>';
-  $('#lblQid').innerHTML = co ? 'رقم السجل التجاري' : 'رقم الهوية (البطاقة الشخصية)';
-  $('#f-person').setAttribute('autocomplete', co ? 'organization' : 'name');
+
+/* ---------- signature pads (drawn with finger, stylus or mouse) ---------- */
+function sigPadHTML(key, label, required) {
+  return '<div class="field sig-field" id="sigf-' + key + '">' +
+    '<p class="label" id="sigl-' + key + '">' + label + (required ? ' <span class="req">*</span>' : '') + '</p>' +
+    '<div class="sig-pad" id="sigbox-' + key + '">' +
+      '<canvas id="pad-' + key + '" data-pad="' + key + '" tabindex="0" role="img" aria-labelledby="sigl-' + key + '" aria-describedby="sigh-' + key + '"></canvas>' +
+      '<span class="sig-ph" aria-hidden="true">وقّع هنا بإصبعك أو بالقلم</span>' +
+      '<span class="sig-line" aria-hidden="true"></span>' +
+    '</div>' +
+    '<div class="sig-actions"><span class="sig-state" id="sigs-' + key + '" aria-live="polite"></span>' +
+    '<button class="btn ghost sm" type="button" data-action="clear-sig" data-key="' + key + '">' + icon('close') + 'مسح التوقيع</button></div>' +
+    '<p class="hint" id="sigh-' + key + '">ارسم التوقيع داخل الإطار. يُحفظ التوقيع على هذا الجهاز مع المحضر.</p>' +
+  '</div>';
 }
+const pads = {};
+function mountPads() {
+  if (!W) return;
+  $$('canvas[data-pad]').forEach(cv => {
+    if (!cv.offsetWidth) return;
+    const key = cv.dataset.pad;
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const w = cv.offsetWidth, h = cv.offsetHeight;
+    if (pads[key] && pads[key].cv === cv && pads[key].w === w && pads[key].h === h) return;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#1E1A1B';
+    pads[key] = { cv, ctx, w, h, drawing: false, last: null, dirty: false };
+    const src = W.d[key];
+    if (src) {
+      const im = new Image();
+      im.onload = () => { const r = Math.min(w / im.width, h / im.height); ctx.drawImage(im, (w - im.width * r) / 2, (h - im.height * r) / 2, im.width * r, im.height * r); };
+      im.src = src;
+    }
+    if (!cv.dataset.bound) {
+      cv.dataset.bound = '1';
+      const pos = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+      cv.addEventListener('pointerdown', e => {
+        const pd = pads[key]; if (!pd) return;
+        e.preventDefault();
+        cv.setPointerCapture(e.pointerId);
+        pd.drawing = true; pd.last = pos(e);
+        pd.ctx.beginPath(); pd.ctx.arc(pd.last.x, pd.last.y, 1.2, 0, Math.PI * 2); pd.ctx.fillStyle = '#1E1A1B'; pd.ctx.fill();
+        pd.dirty = true;
+        $('#sigbox-' + key).classList.add('has-ink');
+      });
+      cv.addEventListener('pointermove', e => {
+        const pd = pads[key]; if (!pd || !pd.drawing) return;
+        e.preventDefault();
+        const pts = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+        pts.forEach(pe => { const p2 = pos(pe); pd.ctx.beginPath(); pd.ctx.moveTo(pd.last.x, pd.last.y); pd.ctx.lineTo(p2.x, p2.y); pd.ctx.stroke(); pd.last = p2; });
+      });
+      const end = () => { const pd = pads[key]; if (!pd || !pd.drawing) return; pd.drawing = false; commitSig(key); };
+      cv.addEventListener('pointerup', end);
+      cv.addEventListener('pointercancel', end);
+      cv.addEventListener('lostpointercapture', end);
+    }
+    updateSigState(key);
+  });
+}
+function commitSig(key) {
+  const pd = pads[key];
+  if (!pd || !W) return;
+  // Export at a fixed, compact size with a transparent background.
+  const out = document.createElement('canvas');
+  out.width = 600; out.height = Math.round(600 * pd.h / pd.w);
+  out.getContext('2d').drawImage(pd.cv, 0, 0, out.width, out.height);
+  W.d[key] = out.toDataURL('image/png');
+  updateSigState(key);
+  $('#sigf-' + key).querySelector('.sig-pad').removeAttribute('aria-invalid');
+  scheduleSave();
+  refreshValidation();
+}
+function clearSig(key) {
+  if (!W) return;
+  W.d[key] = '';
+  const pd = pads[key];
+  if (pd) { pd.ctx.save(); pd.ctx.setTransform(1, 0, 0, 1, 0, 0); pd.ctx.clearRect(0, 0, pd.cv.width, pd.cv.height); pd.ctx.restore(); }
+  updateSigState(key);
+  scheduleSave();
+  refreshValidation();
+}
+function updateSigState(key) {
+  const has = !!(W && W.d[key]);
+  const box = $('#sigbox-' + key);
+  if (box) box.classList.toggle('has-ink', has);
+  const st = $('#sigs-' + key);
+  if (st) st.innerHTML = has ? '<span class="badge b-ok">تم التوقيع</span>' : '<span class="badge b-warn">لم يتم التوقيع</span>';
+  const cv = $('#pad-' + key);
+  if (cv) cv.setAttribute('aria-label', (key === 'offenderSig' ? 'توقيع المخالف' : 'توقيع المفتش') + (has ? ': تم التوقيع' : ': لم يتم التوقيع بعد'));
+}
+window.addEventListener('resize', () => { if (W && W.step === 3) { Object.keys(pads).forEach(k => delete pads[k]); mountPads(); } });
 
 /* ---------- violations & chip numbers ---------- */
 function toggleViolation(no, on) {
@@ -1312,7 +1415,9 @@ function validateStep(s) {
     if (W.busy) e.push({ f: 'camBtn', m: 'انتظر حتى ينتهي تجهيز الصور.' });
   }
   if (s === 3) {
-    if (!d.person.trim()) e.push({ f: 'f-person', m: d.offenderType === 'company' ? 'أدخل اسم الشركة.' : 'أدخل اسم المخالف.' });
+    if (!d.person.trim()) e.push({ f: 'f-person', m: 'أدخل اسم المخالف.' });
+    if (d.signature === 'signed' && !d.offenderSig) e.push({ f: 'pad-offenderSig', m: 'ارسم توقيع المخالف في المكان المخصص، أو غيّر حالة التوقيع.' });
+    if (!d.inspectorSig) e.push({ f: 'pad-inspectorSig', m: 'ارسم توقيع المفتش في المكان المخصص.' });
     if (d.phone.trim() && !/^\+?[0-9][0-9\s-]{5,17}$/.test(latinDigits(d.phone).trim())) e.push({ f: 'f-phone', m: 'رقم الهاتف غير صحيح.' });
   }
   return e;
@@ -1321,7 +1426,11 @@ function showErrors(step, errs, quiet) {
   $$('[aria-invalid="true"]', $('#panel' + step)).forEach(x => x.removeAttribute('aria-invalid'));
   const box = $('#err' + step);
   if (!errs.length) { box.innerHTML = ''; return; }
-  errs.forEach(x => { const el = document.getElementById(x.f); if (el && el.tagName !== 'BUTTON') el.setAttribute('aria-invalid', 'true'); });
+  errs.forEach(x => {
+    let el = document.getElementById(x.f);
+    if (el && el.tagName === 'CANVAS') el = el.parentNode;
+    if (el && el.tagName !== 'BUTTON') el.setAttribute('aria-invalid', 'true');
+  });
   box.innerHTML = '<div class="error-summary" role="alert" tabindex="-1"><h2>يرجى استكمال ما يلي:</h2><ul>' +
     errs.map(x => '<li><button type="button" data-action="focus-field" data-f="' + esc(x.f) + '">' + esc(x.m) + '</button></li>').join('') + '</ul></div>';
   if (quiet) { $('.error-summary', box).removeAttribute('role'); return; }
@@ -1363,6 +1472,10 @@ function renderReview() {
       (d.violationNos.length ? '<ul class="vsum">' + d.violationNos.map(n => '<li><span class="vnum">' + n + '</span><span>' + esc(VBY[n].text) + '</span></li>').join('') + '</ul>' : '<p class="field-error">لم يتم اختيار مخالفات.</p>') +
       (needsChips() ? '<p style="margin-top:8px"><b>أرقام الشرائح:</b> ' + (d.chips.filter(x => String(x).trim()).map(x => ltr(latinDigits(x).trim())).join('، ') || '<span class="field-error">غير مدخلة</span>') + '</p>' : '') +
       '<p style="margin-top:8px"><b>الصور:</b> ' + d.photos.length + ' من ' + MAX_PHOTOS + (d.photos.length ? ' (' + d.photos.filter(p => p.category === 'field').length + ' ميدانية، ' + d.photos.filter(p => p.category === 'support').length + ' دليل داعم)' : '') + '</p>') +
+    sec('التوقيعات', 3, kvRows([
+      ['توقيع المخالف', d.signature === 'signed' ? (d.offenderSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>') : esc(SIGNATURE[d.signature])],
+      ['توقيع المفتش', d.inspectorSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>']
+    ])) +
     '<div style="padding-top:12px"><p class="hint">تأكد من صحة بيانات المخالف أعلاه قبل التسليم.</p></div>';
 }
 
@@ -1548,8 +1661,8 @@ function paperHTML(c) {
     (c.chips.length ? '<p><b>أرقام شرائح الإبل:</b> ' + c.chips.map(ltr).join('، ') + '</p>' : '') +
     '<p><b>شرح المخالفة:</b> ' + esc(c.notes || '—') + '</p>' +
     '<h2>بيانات المخالف</h2><table>' +
-      row('نوع المخالف', OFFENDER_TYPE[c.offenderType]) +
-      row(c.offenderType === 'company' ? 'اسم الشركة' : 'الاسم', esc(c.person || '—')) +
+      (c.offenderType === 'company' ? row('نوع المخالف', OFFENDER_TYPE[c.offenderType]) : '') +
+      row(c.offenderType === 'company' ? 'اسم الشركة' : 'اسم المخالف', esc(c.person || '—')) +
       row(c.offenderType === 'company' ? 'رقم السجل التجاري' : 'رقم البطاقة الشخصية', c.qid ? ltr(c.qid) : '—') +
       row('الهاتف', c.phone ? ltr(c.phone) : '—') +
       row('العنوان', esc(c.address || '—')) +
@@ -1560,7 +1673,11 @@ function paperHTML(c) {
       '<figure><img src="' + esc(p.preview) + '" alt=""><figcaption><b>' + (i + 1) + '. ' + esc(PHOTO_CAT[p.category]) + '</b>' + (p.caption ? ' — ' + esc(p.caption) : '') + '</figcaption></figure>').join('') + '</div>' : '') +
     (c.returnComments.length ? '<h2>ملاحظات الإرجاع</h2><ol>' + c.returnComments.map(r => '<li>' + esc(r.text) + ' (' + fmtDateTime(r.at) + ')</li>').join('') + '</ol>' : '') +
     (c.status === 'approved' && c.managerNote ? '<p><b>ملاحظة الإدارة عند الاعتماد:</b> ' + esc(c.managerNote) + '</p>' : '') +
-    '<div class="p-sign"><div>توقيع المخالف</div><div>اسم وتوقيع المفتش</div><div>اعتماد الإدارة</div></div>' +
+    '<div class="p-sign">' +
+      '<div>' + (c.offenderSig ? '<img src="' + esc(c.offenderSig) + '" alt="">' : c.signature === 'refused' ? '<em>رفض التوقيع</em>' : '') + '<span class="p-line">توقيع المخالف' + (c.person ? '<br>' + esc(c.person) : '') + '</span></div>' +
+      '<div>' + (c.inspectorSig ? '<img src="' + esc(c.inspectorSig) + '" alt="">' : '') + '<span class="p-line">توقيع المفتش' + (c.inspectorName ? '<br>' + esc(c.inspectorName) : '') + '</span></div>' +
+      '<div><span class="p-line">اعتماد الإدارة</span></div>' +
+    '</div>' +
     '<p class="p-note">نموذج تجريبي غير معتمد — بيانات محفوظة محلياً ولم تُرسل إلى الوزارة. ' + LEGAL_NOTE + '</p>' +
   '</article>';
 }
@@ -1624,6 +1741,7 @@ document.addEventListener('click', e => {
     case 'submit': submitWizard(); break;
     case 'locate': useMyLocation(); break;
     case 'clear-loc': clearLocation(); break;
+    case 'clear-sig': clearSig(t.dataset.key); break;
     case 'open-map': openMap(); break;
     case 'add-chip': {
       W.d.chips.push('');

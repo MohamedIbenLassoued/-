@@ -282,6 +282,18 @@ table.rows{width:100%;border-collapse:collapse;font-size:.92rem}
 .step-pills [aria-current="step"]{box-shadow:0 0 0 2px var(--maroon) inset}
 .step-pills [aria-current="step"].has-err{background:#fff;box-shadow:0 0 0 2px var(--bad) inset}
 .step-hint{margin-top:8px;font-size:.78rem}
+.sig-pad{position:relative;height:170px;border:1.5px dashed var(--line-strong);border-radius:12px;background:#fff;overflow:hidden}
+.sig-pad[aria-invalid="true"]{border-style:solid}
+.sig-pad canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair;z-index:2}
+.sig-pad canvas:focus-visible{outline:3px solid var(--maroon);outline-offset:-3px}
+.sig-ph{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:.9rem;pointer-events:none;z-index:1}
+.sig-pad.has-ink .sig-ph{display:none}
+.sig-line{position:absolute;left:20px;right:20px;bottom:36px;border-bottom:1px solid var(--line-strong);pointer-events:none;z-index:1}
+.sig-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px}
+.sig-view{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.sig-view figure{margin:0;border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--surface-2);min-height:96px;display:flex;flex-direction:column;gap:4px}
+.sig-view figcaption{font-size:.8rem;font-weight:700;color:var(--muted)}
+.sig-view img{max-height:70px;width:auto;max-width:100%;object-fit:contain;margin:auto}
 .loc-btn{min-width:200px;padding-inline:22px}
 @media (max-width:420px){.loc-btn{min-width:0}}
 .panel > .card + .card{margin-top:14px}
@@ -503,7 +515,10 @@ dialog.confirm{width:min(92vw,440px)}
 .paper .p-photos img{width:100%;height:62mm;object-fit:cover}
 .paper .p-photos figcaption{font-size:9pt}
 .paper .p-sign{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px;break-inside:avoid}
-.paper .p-sign div{border-top:1px dotted #555;padding-top:6px;text-align:center;font-size:10pt;margin-top:34px}
+.paper .p-sign div{display:flex;flex-direction:column;justify-content:flex-end;min-height:30mm;text-align:center;font-size:10pt}
+.paper .p-sign img{display:block;height:18mm;width:auto;max-width:100%;margin:0 auto 2mm;object-fit:contain}
+.paper .p-sign em{display:block;margin-bottom:3mm}
+.paper .p-sign .p-line{border-top:1px dotted #555;padding-top:6px}
 .paper .p-note{font-size:9pt;border:1px dashed #999;padding:6px 8px;margin-top:12px}
 </style>
 </head>
