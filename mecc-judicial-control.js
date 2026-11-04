@@ -710,6 +710,13 @@ function wizardHTML(rec) {
   const d = W.d;
   const ret = rec && rec.status === 'returned' ? latestReturn(rec) : null;
   const older = rec ? rec.returnComments.slice(0, -1) : [];
+  /* Camel chip numbers sit directly under the grazing violations (1–4) that require them. */
+  const chipBox = '<div class="chip-box" id="chipBox" hidden>' +
+      '<div class="card-head" style="margin-bottom:6px"><h3 id="chipH">' + icon('chip') + ' أرقام شرائح الإبل <span class="req">*</span></h3></div>' +
+      '<p class="hint" style="margin:0 0 10px">مطلوبة لمخالفات الرعي (البنود 1–4). أضف رقماً لكل شريحة.</p>' +
+      '<div id="chipList" role="group" aria-labelledby="chipH"></div>' +
+      '<button class="btn secondary block" type="button" data-action="add-chip">' + icon('plus') + 'إضافة رقم شريحة</button>' +
+    '</div>';
   const vgroups = Object.keys(CATS).map(cat => {
     const items = VIOLATIONS.filter(v => v.cat === cat);
     return '<p class="vgroup-title" aria-hidden="true">' + CATS[cat] + '</p>' + items.map(v =>
@@ -718,7 +725,7 @@ function wizardHTML(rec) {
         '<span class="vnum" aria-hidden="true">' + v.no + '</span>' +
         '<span class="vbody"><span class="vtag">البند ' + v.no + ' · ' + CATS[v.cat] + '</span><span class="vtext" id="vt' + v.no + '">' + esc(v.text) + '</span></span>' +
         '<span class="vcheck" aria-hidden="true">' + icon('check') + '</span>' +
-      '</label>').join('');
+      '</label>').join('') + (cat === 'grazing' ? chipBox : '');
   }).join('');
   const legacyNote = rec && rec.legacyViolations.length ? '<div class="msg warn" style="margin-bottom:12px">' + icon('alert') + '<div><strong>بنود من نسخة سابقة</strong>كان هذا المحضر يتضمن: ' + esc(rec.legacyViolations.join('، ')) + '. يرجى اختيار البنود الرسمية المطابقة.</div></div>' : '';
 
@@ -779,12 +786,6 @@ function wizardHTML(rec) {
       '<p class="hint" style="margin:-4px 0 12px">اضغط على البطاقة لاختيار المخالفة أو إلغاء اختيارها. يمكن اختيار أكثر من مخالفة.</p>' +
       legacyNote +
       '<div class="vlist" role="group" aria-labelledby="vH" id="vList" tabindex="-1">' + vgroups + '</div>' +
-      '<div class="chip-box" id="chipBox" hidden>' +
-        '<div class="card-head" style="margin-bottom:6px"><h3 id="chipH">' + icon('chip') + ' أرقام شرائح الإبل <span class="req">*</span></h3></div>' +
-        '<p class="hint" style="margin:0 0 10px">مطلوبة لمخالفات الرعي (البنود 1–4). أضف رقماً لكل شريحة.</p>' +
-        '<div id="chipList" role="group" aria-labelledby="chipH"></div>' +
-        '<button class="btn secondary block" type="button" data-action="add-chip">' + icon('plus') + 'إضافة رقم شريحة</button>' +
-      '</div>' +
       '<div class="field" style="margin-top:16px"><label for="f-notes">شرح المخالفة</label><textarea id="f-notes" data-f="notes" rows="4" placeholder="وصف الواقعة كما شوهدت في الموقع">' + esc(d.notes) + '</textarea></div>' +
       '<details class="legal"><summary>' + icon('scale') + 'الإطار القانوني والعقوبات المقررة (للاطلاع فقط)</summary><div class="body">' +
         '<div class="legal-note" style="margin-bottom:10px">' + icon('info') + '<span>' + LEGAL_NOTE + '</span></div>' +
