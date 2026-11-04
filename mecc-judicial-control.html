@@ -176,7 +176,7 @@ legend{padding:0}
 fieldset{border:0;padding:0;margin:0;min-width:0}
 .req{color:var(--bad)}
 .opt{color:var(--muted);font-weight:400;font-size:.82rem}
-input[type=text],input[type=tel],input[type=date],input[type=time],input[type=search],input[type=number],select,textarea{width:100%;min-height:48px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:#fff;padding:10px 12px;font-size:16px;line-height:1.5;transition:border-color .15s,box-shadow .15s}
+input[type=text],input[type=password],input[type=tel],input[type=date],input[type=time],input[type=search],input[type=number],select,textarea{width:100%;min-height:48px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:#fff;padding:10px 12px;font-size:16px;line-height:1.5;transition:border-color .15s,box-shadow .15s}
 textarea{min-height:96px;resize:vertical}
 input:focus,select:focus,textarea:focus{border-color:var(--maroon);box-shadow:0 0 0 3px rgba(138,21,56,.18);outline:none}
 input[readonly]{background:var(--surface-2);color:var(--text-2)}
@@ -422,6 +422,52 @@ dialog.viewer::backdrop{background:rgba(20,10,14,.7)}
 .viewer p{padding:10px 16px 14px;font-size:.92rem;overflow-wrap:anywhere}
 
 #printArea{display:none}
+/* login (mock) */
+body.auth .sidebar,body.auth .topbar,body.auth .bottomnav,body.auth #backdrop{display:none!important}
+body.auth .app{display:block}
+body.auth main{max-width:none;padding-bottom:32px}
+.login{min-height:calc(100vh - 90px);display:grid;grid-template-columns:minmax(0,1fr);justify-items:center;align-content:center;padding:8px 0}
+body.auth .localbar{top:env(safe-area-inset-top,0px)}
+.login-card{width:100%;max-width:440px;background:#fff;border:1px solid var(--line);border-top:5px solid var(--maroon);border-radius:20px;box-shadow:var(--sh);padding:24px 20px}
+.login-brand{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.login-brand .brand-mark{background:var(--maroon);color:#fff;width:48px;height:48px;font-size:.7rem}
+.login-brand strong{display:block;font-size:.98rem}
+.login-brand span{font-size:.8rem;color:var(--muted)}
+.login h1{margin-bottom:2px}
+.login .lead{margin-bottom:16px;color:var(--muted)}
+.pass-wrap{position:relative}
+.pass-wrap input{padding-left:52px}
+.pass-wrap .icon-btn{position:absolute;left:2px;top:2px;color:var(--muted)}
+.demo-accounts{display:grid;gap:8px}
+.demo-acc{display:flex;align-items:center;gap:12px;width:100%;min-height:58px;padding:10px 14px;border:1px solid var(--line-strong);border-radius:12px;background:var(--surface-2);text-align:start;color:var(--text)}
+.demo-acc:hover{border-color:var(--maroon);background:var(--maroon-50)}
+.demo-acc .ic{color:var(--maroon)}
+.demo-acc b{display:block;font-size:.95rem}
+.demo-acc small{color:var(--muted);font-size:.78rem}
+.side-user{display:flex;align-items:center;gap:10px;padding:8px 12px;color:#fff}
+.side-user b{display:block;font-size:.92rem}
+.side-user small{opacity:.85;font-size:.76rem}
+/* report file preview */
+dialog.preview{padding:0;border:0;width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:none;margin:0;background:#5A5254;color:var(--text)}
+dialog.preview[open]{display:flex;flex-direction:column}
+dialog.preview::backdrop{background:rgba(20,10,14,.6)}
+.pv-head{display:flex;align-items:center;gap:8px;padding:8px 10px;padding-top:calc(8px + env(safe-area-inset-top,0px));background:#fff;border-bottom:1px solid var(--line)}
+.pv-head .t{flex:1;min-width:0}
+.pv-head h2{font-size:1rem}
+#previewSub{margin:0;font-size:.78rem;overflow-wrap:anywhere}
+.pv-tools{display:flex;align-items:center;gap:4px}
+.pv-tools .icon-btn,.pv-head>.icon-btn{border:1px solid var(--line);background:#fff;font-size:1.2rem;font-weight:700}
+.pv-fit{min-width:56px;min-height:44px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);font-weight:700;font-size:.82rem;direction:ltr}
+.pv-body{flex:1;overflow:auto;padding:12px;-webkit-overflow-scrolling:touch}
+.pv-page{position:relative;margin:0 auto 12px;overflow:hidden;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.35)}
+.pv-inner{position:absolute;top:0;right:0;width:794px;height:1123px;transform-origin:top right}
+.pv-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));background:#fff;border-top:1px solid var(--line)}
+.pv-note{flex:1 1 220px;display:flex;gap:8px;align-items:center;margin:0;font-size:.86rem;font-weight:600}
+.pv-note.ok{color:var(--ok)}
+.pv-note.info{color:var(--info)}
+.dlg-toast .toast{bottom:calc(90px + env(safe-area-inset-bottom,0px))}
+@media (max-width:480px){.pv-foot .btn{flex:1 1 auto}}
+@media (min-width:1024px){dialog.preview{width:min(1000px,94vw);height:94vh;margin:auto;border-radius:16px;overflow:hidden}}
 dialog.confirm{width:min(92vw,440px)}
 .confirm-body{padding:20px;display:flex;flex-direction:column;gap:12px}
 .confirm-body h2{font-size:1.1rem;text-wrap:balance}
@@ -534,8 +580,8 @@ dialog.confirm{width:min(92vw,440px)}
     </div>
     <p class="side-label" id="sidePortalLabel">بوابة المفتش</p>
     <nav class="side-nav" id="sideNav" aria-labelledby="sidePortalLabel"></nav>
-    <p class="side-label">تبديل البوابة</p>
-    <nav class="side-nav" id="sideSwitch" aria-label="تبديل البوابة"></nav>
+    <p class="side-label">الحساب</p>
+    <nav class="side-nav" id="sideSwitch" aria-label="الحساب"></nav>
     <div class="side-foot">
       <p>نسخة تجريبية للعرض — البيانات محفوظة على هذا الجهاز فقط ولا تُرسل إلى الوزارة.</p>
       <p id="storageUse"></p>
@@ -585,6 +631,26 @@ dialog.confirm{width:min(92vw,440px)}
       <button class="btn lg secondary" type="button" id="confirmCancel">إلغاء</button>
     </div>
   </div>
+</dialog>
+
+<dialog class="preview" id="previewDlg" aria-labelledby="previewTitle">
+  <div class="pv-head">
+    <div class="t"><h2 id="previewTitle">معاينة المحضر الرسمي</h2><p id="previewSub" class="hint"></p></div>
+    <div class="pv-tools" role="group" aria-label="التكبير">
+      <button class="icon-btn" type="button" data-action="pv-zoom" data-z="-1" aria-label="تصغير">−</button>
+      <button class="pv-fit" type="button" data-action="pv-zoom" data-z="0" aria-label="ملاءمة العرض"><span id="pvZoom">100%</span></button>
+      <button class="icon-btn" type="button" data-action="pv-zoom" data-z="1" aria-label="تكبير">+</button>
+    </div>
+    <button class="icon-btn" type="button" data-action="pv-close" aria-label="إغلاق المعاينة">✕</button>
+  </div>
+  <div class="pv-body" id="pvBody" tabindex="0" aria-label="صفحات المحضر"></div>
+  <div class="pv-foot">
+    <p class="pv-note" id="pvNote"></p>
+    <button class="btn primary lg" type="button" id="pvDownload" data-action="pv-download">تنزيل PDF</button>
+    <button class="btn secondary lg" type="button" id="pvPrint" data-action="pv-print">طباعة</button>
+    <button class="btn ghost lg" type="button" data-action="pv-close">إغلاق</button>
+  </div>
+  <div class="dlg-toast" aria-live="polite"></div>
 </dialog>
 
 <div id="printArea" aria-hidden="true"></div>

@@ -137,6 +137,7 @@ const ICONS = {
   device: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   scale: '<path d="M12 3v18M5 21h14M5 7h14M7 7l-3 7h6zM17 7l-3 7h6z"/>',
+  logout: '<path d="M14 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5"/><path d="M9 8l-4 4 4 4M5 12h11"/>',
   chip: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>'
 };
 function icon(name, cls) {
@@ -330,10 +331,11 @@ function renderShell(portal, p) {
   $('#portalPill').setAttribute('aria-label', 'البوابة الحالية: ' + PORTALS[portal].long);
   $('#sidePortalLabel').textContent = PORTALS[portal].long;
   $('#sideNav').innerHTML = NAV[portal].map(it => '<a href="' + it.h + '"' + cur(it) + '>' + icon(it.icon) + '<span>' + it.label + '</span></a>').join('');
-  const sw = SWITCH[portal].map(k => PORTALS[k]);
-  $('#sideSwitch').innerHTML = sw.map(x => '<a href="' + x.h + '">' + icon(x.icon) + '<span>' + x.long + '</span></a>').join('');
-  const bn = NAV[portal].concat(sw);
-  $('#bottomnav').innerHTML = bn.map(it => '<a href="' + it.h + '"' + cur(it) + (it.accent ? ' class="accent"' : '') + '><span class="bn-icon">' + icon(it.icon) + '</span><span>' + it.label + '</span></a>').join('');
+  const u = currentUser();
+  $('#sideSwitch').innerHTML = u ? '<div class="side-user">' + icon('user', 'ic-lg') + '<span><b>' + esc(u.name) + '</b><small>' + esc(u.title) + '</small></span></div>' +
+    '<a href="#" data-action="logout">' + icon('logout') + '<span>تسجيل الخروج</span></a>' : '';
+  const bn = NAV[portal].concat([{ h: '#', k: 'logout', label: 'خروج', icon: 'logout', action: 'logout' }]);
+  $('#bottomnav').innerHTML = bn.map(it => '<a href="' + it.h + '"' + cur(it) + (it.accent ? ' class="accent"' : '') + (it.action ? ' data-action="' + it.action + '"' : '') + '><span class="bn-icon">' + icon(it.icon) + '</span><span>' + it.label + '</span></a>').join('');
 }
 function openDrawer() {
   const sb = $('#sidebar');
@@ -353,7 +355,8 @@ function closeDrawer(restore) {
 }
 let toastTimer = null;
 function toast(text, kind) {
-  const r = $('#toastRegion');
+  const dlg = document.querySelector('dialog.preview[open]');
+  const r = dlg ? $('.dlg-toast', dlg) : $('#toastRegion');
   r.innerHTML = '<div class="toast ' + (kind || 'ok') + '">' + icon(kind === 'bad' ? 'alert' : kind === 'info' ? 'info' : 'check') + '<span>' + esc(text) + '</span></div>';
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { r.innerHTML = ''; }, 5200);
@@ -401,6 +404,156 @@ function updateNet() { $('#netState').hidden = navigator.onLine !== false; }
 /* ------------------------------------------------------------------ *
  * Router
  * ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ *
+ * Mock sign-in (prototype only — no server, credentials are public demo values)
+ * ------------------------------------------------------------------ */
+const SESSION_KEY = 'mecc_session_v1';
+const USERS = [
+  { username: 'inspector', password: '1234', no: '16000001', name: 'مفتش تجريبي', role: 'inspector', title: 'مفتش ميداني' },
+  { username: 'admin', password: '1234', no: '16000002', name: 'مراجع الإدارة', role: 'admin', title: 'الإدارة — المراجعة' },
+  { username: 'director', password: '1234', no: '16000003', name: 'مدير الإدارة', role: 'director', title: 'المدير — الاعتماد' }
+];
+function getSession() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+    return s && USERS.some(u => u.username === s.username) ? s : null;
+  } catch (e) { return memSession; }
+}
+let memSession = null;
+function setSession(u) {
+  const s = u ? { username: u.username, name: u.name, role: u.role, title: u.title, no: u.no, at: new Date().toISOString() } : null;
+  memSession = s;
+  try { if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s)); else localStorage.removeItem(SESSION_KEY); } catch (e) { /* keep in memory */ }
+}
+function currentUser() { return getSession() || memSession; }
+function actorName(fallback) { const u = currentUser(); return u ? u.name : fallback; }
+function findUser(id) {
+  const k = latinDigits(id).trim().toLowerCase();
+  return USERS.find(u => u.username === k || u.no === k) || null;
+}
+function signIn(u) {
+  setSession(u);
+  if (u.role === 'inspector') { const p = getProfile(); p.name = u.name; p.no = u.no; setProfile(p); }
+  const target = PORTALS[u.role].h;
+  if (location.hash === target) render(); else location.hash = target;
+  toast('مرحباً، ' + u.name + '. تم تسجيل الدخول (تجريبياً).');
+}
+async function signOut() {
+  if (!(await askConfirm('تسجيل الخروج؟', 'ستعود إلى صفحة تسجيل الدخول. البيانات المحلية تبقى محفوظة على هذا الجهاز.', 'تسجيل الخروج'))) return;
+  leaveWizard();
+  setSession(null);
+  if (location.hash === '#login') render(); else location.hash = '#login';
+}
+function renderLogin(view) {
+  view.innerHTML =
+    '<div class="login">' +
+      '<div class="login-card">' +
+        '<div class="login-brand"><span class="brand-mark" aria-hidden="true">MECC</span><div><strong>وزارة البيئة والتغير المناخي</strong><span>دولة قطر · إدارة الحماية البرية</span></div></div>' +
+        '<h1>تسجيل الدخول</h1>' +
+        '<p class="lead">نظام محاضر الضبط القضائي</p>' +
+        '<form id="loginForm" novalidate>' +
+          '<div class="field"><label for="lg-user">اسم المستخدم أو الرقم الوظيفي</label><input id="lg-user" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" class="num-input" required></div>' +
+          '<div class="field"><label for="lg-pass">كلمة المرور</label><div class="pass-wrap"><input id="lg-pass" type="password" autocomplete="current-password" class="num-input" required>' +
+            '<button class="icon-btn" type="button" data-action="toggle-pass" aria-label="إظهار كلمة المرور" aria-pressed="false">' + icon('eye') + '</button></div></div>' +
+          '<div id="loginErr" class="field-error" role="alert"></div>' +
+          '<button class="btn primary lg block" type="submit" id="loginBtn">تسجيل الدخول</button>' +
+        '</form>' +
+        '<hr class="divider">' +
+        '<p class="label">حسابات تجريبية — اضغط للدخول مباشرة</p>' +
+        '<div class="demo-accounts">' + USERS.map(u =>
+          '<button class="demo-acc" type="button" data-action="demo-login" data-user="' + u.username + '">' + icon(PORTALS[u.role].icon, 'ic-lg') +
+          '<span><b>' + esc(PORTALS[u.role].long) + '</b><small>' + esc(u.title) + ' · <bdi dir="ltr">' + u.username + ' / ' + u.password + '</bdi></small></span></button>').join('') +
+        '</div>' +
+        '<p class="hint" style="margin-top:14px">تسجيل دخول تجريبي (وهمي): لا يتم التحقق عبر أي خادم، والحسابات أعلاه للعرض فقط.</p>' +
+      '</div>' +
+    '</div>';
+  return 'تسجيل الدخول';
+}
+function submitLogin() {
+  const u = $('#lg-user'), p = $('#lg-pass'), err = $('#loginErr'), btn = $('#loginBtn');
+  [u, p].forEach(x => x.removeAttribute('aria-invalid'));
+  if (!u.value.trim() || !p.value) {
+    err.textContent = 'أدخل اسم المستخدم وكلمة المرور.';
+    (u.value.trim() ? p : u).setAttribute('aria-invalid', 'true');
+    (u.value.trim() ? p : u).focus();
+    return;
+  }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" aria-hidden="true"></span>جارٍ التحقق…';
+  setTimeout(() => {
+    const user = findUser(u.value);
+    if (!user || user.password !== latinDigits(p.value)) {
+      btn.disabled = false; btn.textContent = 'تسجيل الدخول';
+      err.textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة.';
+      p.value = ''; p.setAttribute('aria-invalid', 'true'); p.focus();
+      return;
+    }
+    signIn(user);
+  }, 450);
+}
+
+/* ------------------------------------------------------------------ *
+ * Preview of the official report file (WPD/01) before export
+ * ------------------------------------------------------------------ */
+let pv = { c: null, zoom: 0 }; // zoom 0 = fit to width
+function ensureWpdStyle() {
+  if (!document.getElementById('wpdStyle')) {
+    const st = document.createElement('style');
+    st.id = 'wpdStyle';
+    st.textContent = WPD_CSS;
+    document.head.appendChild(st);
+  }
+}
+function openPreview(c) {
+  if (!c) return;
+  ensureWpdStyle();
+  pv.c = c; pv.zoom = 0;
+  const d = $('#previewDlg');
+  const approved = c.status === 'approved' && !!getCase(c.id);
+  const pages = wpdPages(c);
+  $('#previewSub').innerHTML = ltr(c.id) + ' · ' + esc(STATUS[c.status] ? STATUS[c.status].label : '') + ' · ' + pages.length + (pages.length === 1 ? ' صفحة' : ' صفحات');
+  $('#pvNote').innerHTML = approved
+    ? icon('check') + '<span>المحضر معتمد من المدير، والملف جاهز للتنزيل بصيغة PDF.</span>'
+    : icon('info') + '<span>معاينة فقط: يمكن تنزيل الملف بعد اعتماد المدير.</span>';
+  $('#pvNote').className = 'pv-note ' + (approved ? 'ok' : 'info');
+  const dl = $('#pvDownload');
+  dl.hidden = !approved;
+  dl.dataset.id = c.id;
+  const pr = $('#pvPrint');
+  pr.hidden = !approved || EMBEDDED;
+  pr.dataset.id = c.id;
+  $('#pvBody').innerHTML = pages.map((h, i) => '<div class="pv-page" role="img" aria-label="الصفحة ' + (i + 1) + ' من ' + pages.length + '"><div class="pv-inner">' + h + '</div></div>').join('');
+  if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
+  layoutPreview();
+  $('#pvBody').scrollTop = 0;
+}
+function layoutPreview() {
+  const body = $('#pvBody');
+  if (!body || !pv.c) return;
+  const fit = Math.min(1.25, Math.max(0.2, (body.clientWidth - 24) / WPD_W));
+  const s = pv.zoom ? pv.zoom : fit;
+  $('#pvZoom').textContent = Math.round(s * 100) + '%';
+  $$('.pv-page', body).forEach(p => {
+    p.style.width = WPD_W * s + 'px';
+    p.style.height = WPD_H * s + 'px';
+    p.firstChild.style.transform = 'scale(' + s + ')';
+  });
+}
+function zoomPreview(step) {
+  const body = $('#pvBody');
+  const fit = Math.min(1.25, Math.max(0.2, (body.clientWidth - 24) / WPD_W));
+  const cur = pv.zoom || fit;
+  pv.zoom = step === 0 ? 0 : Math.min(2, Math.max(0.25, cur * (step > 0 ? 1.25 : 0.8)));
+  layoutPreview();
+}
+function closePreview() {
+  const d = $('#previewDlg');
+  if (d.open) { if (typeof d.close === 'function') d.close(); else d.removeAttribute('open'); }
+  $('#pvBody').innerHTML = '';
+  pv.c = null;
+}
+window.addEventListener('resize', () => { if (pv.c) layoutPreview(); });
+
 /* Routes use plain "#name" hashes (letters, digits, hyphens) so they also work inside
    embedded viewers: #home, #reports-returned, #new, #edit-<id>, #view-<id>,
    #admin, #admin-inbox-<filter>, #admin-review-<id>. Old "#/a/b" links still parse. */
@@ -415,10 +568,22 @@ function parseRoute() {
 function render() {
   leaveWizard();
   closeDrawer();
+  if (pv.c) closePreview();
+  const view = $('#view');
+  const user = currentUser();
+  if (!user) {
+    document.body.classList.add('auth');
+    if (location.hash !== '#login') history.replaceState(null, '', '#login');
+    document.title = renderLogin(view) + ' | محاضر الضبط القضائي';
+    window.scrollTo(0, 0);
+    return;
+  }
+  document.body.classList.remove('auth');
   const p = parseRoute();
   const portal = p[0] === 'admin' || p[0] === 'director' ? p[0] : 'inspector';
+  // Each signed-in role sees only its own portal.
+  if (portal !== user.role || p[0] === 'login') { location.replace(PORTALS[user.role].h); return; }
   renderShell(portal, p);
-  const view = $('#view');
   let title;
   if (portal === 'admin') {
     if (p[1] === 'inbox') title = renderAdminInbox(view, p[2]);
@@ -1503,7 +1668,8 @@ function renderReview() {
       ['توقيع المخالف', d.signature === 'signed' ? (d.offenderSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>') : esc(SIGNATURE[d.signature])],
       ['توقيع المفتش', d.inspectorSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>']
     ])) +
-    '<div style="padding-top:12px"><p class="hint">تأكد من صحة بيانات المخالف أعلاه قبل التسليم.</p></div>';
+    '<div style="padding-top:12px"><p class="hint">تأكد من صحة بيانات المخالف أعلاه قبل التسليم.</p>' +
+    '<button class="btn secondary" type="button" data-action="wiz-preview" style="margin-top:10px">' + icon('eye') + 'معاينة المحضر بصيغة النموذج</button></div>';
 }
 
 /* ---------- step navigation & submit ---------- */
@@ -1660,7 +1826,7 @@ function decisionField(label, hint) {
 function approvedPanel(c) {
   const h = lastAction(c, 'approved');
   return '<div class="msg ok">' + icon('check') + '<div><strong>تم اعتماد المحضر' + (h && h.by ? ' — ' + esc(h.by) : '') + '</strong>' + fmtDateTime(h ? h.at : c.reviewedAt) + '<br>المحضر للقراءة فقط ولا يمكن تعديله.</div></div>' +
-    '<div class="btn-row" style="margin-top:12px"><button class="btn primary block" type="button" data-action="official-pdf" data-id="' + esc(c.id) + '">' + icon('print') + 'تنزيل المحضر الرسمي (PDF)</button></div>' +
+    '<div class="btn-row" style="margin-top:12px"><button class="btn primary block" type="button" data-action="official-preview" data-id="' + esc(c.id) + '">' + icon('eye') + 'معاينة وتنزيل المحضر الرسمي</button></div>' +
     '<p class="hint">ملف بصيغة نموذج WPD/01: الصفحة الأولى للمحضر، تليها صفحات الأدلة المصورة.</p>';
 }
 function renderAdminReview(view, id) { return renderRoleReview(view, id, 'admin'); }
@@ -1743,7 +1909,7 @@ async function decide(id, action) {
   c.updatedAt = now;
   if (action === 'approved') { c.reviewedAt = now; c.managerNote = note; }
   if (action === 'returned') { c.reviewedAt = now; c.managerNote = note; c.returnComments.push({ text: note, at: now, by: 'الإدارة' }); }
-  c.history.push({ action, at: now, by: T.by, note });
+  c.history.push({ action, at: now, by: T.by + ' — ' + actorName(T.by), note });
   try { upsertCase(c); } catch (e) { toast('تعذر حفظ القرار محلياً.', 'bad'); return; }
   toast(T.done);
   render();
@@ -1863,6 +2029,7 @@ table.w-tbl{width:100%;border-collapse:collapse;font-size:9.5px;line-height:1.33
 .w-insp{display:flex;align-items:flex-end;gap:10px;min-height:36px;margin-top:0;font-size:11.5px}
 .w-insp .fill{flex:1;border-bottom:1px dotted #777;color:#1a2a8a;font-size:14px;padding:0 6px;min-height:22px}
 .w-foot{margin-top:auto;text-align:center;font-size:11px;font-weight:600;padding-top:4px}
+.w-wm{position:absolute;top:44%;left:50%;transform:translate(-50%,-50%) rotate(-28deg);font-size:56px;font-weight:700;color:rgba(161,35,43,.14);white-space:nowrap;pointer-events:none;z-index:5}
 .w-meta{display:flex;justify-content:space-between;font-size:8.5px;color:#777;margin-top:4px;direction:rtl}
 .w-ph-head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #8A1538;padding-bottom:6px;margin-bottom:12px;font-size:12px}
 .w-ph-head b{color:#8A1538;font-size:14px}
@@ -1886,6 +2053,7 @@ function wpdApprovedAt(c) {
   const h = c.history.slice().reverse().find(x => x.action === 'approved');
   return h ? h.at : c.reviewedAt;
 }
+function wpdWatermark(c) { return c.status === 'approved' ? '' : '<div class="w-wm">غير معتمد — للمعاينة فقط</div>'; }
 function wpdPage1(c) {
   const d = c.date ? new Date(c.date + 'T00:00:00') : null;
   const weekday = d && !isNaN(d) ? d.toLocaleDateString('ar-QA', { weekday: 'long' }) : '';
@@ -1905,7 +2073,7 @@ function wpdPage1(c) {
   const sulh = c.settlement === 'offered'
     ? 'هذا وقد تم عرض الصلح على المخالف في المخالفات التي يجوز فيها الصلح، وأقر المسؤول بمخالفته لأحكام القانون، وطُلب منه مراجعة الإدارة لاستكمال إجراءات الصلح.'
     : c.settlement === 'not_offered' ? 'لم يُعرض الصلح على المخالف.' : 'عرض الصلح: لم يحدد.';
-  return '<div class="wpd-page">' +
+  return '<div class="wpd-page">' + wpdWatermark(c) +
     '<div class="w-head">' +
       '<div class="w-min">' + logo + '<div><b>وزارة البيئة والتغيـر المناخي</b><div class="en">Ministry of Environment and Climate Change</div><div class="st">State of Qatar · دولة قطر</div></div></div>' +
       '<div class="w-dept"><b>إدارة الحماية البريـة</b><div class="en">Wild Protection Department</div><div class="code">WPD/01/</div></div>' +
@@ -1941,14 +2109,14 @@ function wpdPage1(c) {
     '<div class="w-bar">المفتش</div>' +
     '<div class="w-insp"><span class="lbl">الاسم</span><span class="fill">' + esc(c.inspectorName) + '</span><span class="lbl">التوقيع</span><span class="fill">' + (c.inspectorSig ? '<img class="w-sig" src="' + esc(c.inspectorSig) + '" alt="">' : '') + '</span></div>' +
     '<div class="w-foot">توزيع النسخ : &#160; أبيض : الإدارة &#160;-&#160; أزرق : المخالف &#160;-&#160; أحمر : الدفتر</div>' +
-    '<div class="w-meta"><span>رقم المحضر: <span class="ltr">' + esc(c.id) + '</span> · اعتمده المدير: ' + esc(fmtDateTime(wpdApprovedAt(c))) + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
+    '<div class="w-meta"><span>رقم المحضر: <span class="ltr">' + esc(c.id) + '</span>' + (c.status === 'approved' ? ' · اعتمده المدير: ' + esc(fmtDateTime(wpdApprovedAt(c))) : ' · الحالة: ' + esc(STATUS[c.status] ? STATUS[c.status].label : '')) + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
   '</div>';
 }
 function wpdPhotoPages(c) {
   const pages = [];
   for (let i = 0; i < c.photos.length; i += 2) {
     const pair = c.photos.slice(i, i + 2);
-    pages.push('<div class="wpd-page">' +
+    pages.push('<div class="wpd-page">' + wpdWatermark(c) +
       '<div class="w-ph-head"><b>الأدلة المصورة</b><span>محضر رقم <span class="ltr">' + esc(c.id) + '</span> · <span class="ltr">WPD/01</span></span></div>' +
       '<div class="w-ph">' + pair.map((p, j) => '<figure><div class="img"><img src="' + esc(p.preview) + '" alt=""></div><figcaption><b>' + (i + j + 1) + '. ' + esc(PHOTO_CAT[p.category]) + '</b>' + (p.caption ? ' — ' + esc(p.caption) : '') + '</figcaption></figure>').join('') + '</div>' +
       '<div class="w-meta"><span>صفحة ' + (pages.length + 2) + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
@@ -2060,7 +2228,7 @@ async function downloadOfficial(id, btn) {
   const filename = 'WPD01-' + c.id + '.pdf';
   const host = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('downloads').catch(() => null) : null;
   if (host) {
-    try { await host.save({ filename, data: blob }); toast('تم حفظ المحضر الرسمي (PDF).'); }
+    try { await host.save({ filename, data: blob }); toast('تم حفظ المحضر الرسمي (PDF).'); restore(); return true; }
     catch (e) { if (!e || e.code !== 'declined') toast('تعذر حفظ الملف في هذا العرض.', 'bad'); }
     restore();
     return;
@@ -2073,6 +2241,7 @@ async function downloadOfficial(id, btn) {
   setTimeout(() => URL.revokeObjectURL(url), 15000);
   toast('تم تنزيل المحضر الرسمي (PDF).');
   restore();
+  return true;
 }
 /* Local (not embedded): vector print of the same official form; choose "Save as PDF" in the dialog. */
 function printOfficial(id) {
@@ -2087,10 +2256,7 @@ function printOfficial(id) {
 }
 function reportActions(c) {
   let out = '';
-  if (c.status === 'approved') {
-    out += '<button class="btn primary" type="button" data-action="official-pdf" data-id="' + esc(c.id) + '">' + icon('print') + 'تنزيل المحضر الرسمي (PDF)</button>';
-    if (!EMBEDDED) out += '<button class="btn secondary" type="button" data-action="official-print" data-id="' + esc(c.id) + '">' + icon('print') + 'طباعة النموذج الرسمي</button>';
-  }
+  if (c.status !== 'draft') out += '<button class="btn ' + (c.status === 'approved' ? 'primary' : 'secondary') + '" type="button" data-action="official-preview" data-id="' + esc(c.id) + '">' + icon('eye') + (c.status === 'approved' ? 'معاينة وتنزيل المحضر الرسمي' : 'معاينة المحضر الرسمي') + '</button>';
   if (!EMBEDDED && c.status !== 'approved') out += '<button class="btn secondary" type="button" data-action="print" data-id="' + esc(c.id) + '">' + icon('print') + 'طباعة / PDF</button>';
   return out;
 }
@@ -2116,6 +2282,20 @@ document.addEventListener('click', e => {
   const a = t.dataset.action;
   switch (a) {
     case 'menu': openDrawer(); break;
+    case 'logout': e.preventDefault(); closeDrawer(); signOut(); break;
+    case 'demo-login': { const u = USERS.find(x => x.username === t.dataset.user); if (u) signIn(u); break; }
+    case 'toggle-pass': {
+      const inp = $('#lg-pass'); const show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      t.setAttribute('aria-pressed', String(show));
+      t.setAttribute('aria-label', show ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور');
+      break;
+    }
+    case 'official-preview': openPreview(getCase(t.dataset.id)); break;
+    case 'pv-zoom': zoomPreview(Number(t.dataset.z)); break;
+    case 'pv-close': closePreview(); break;
+    case 'pv-download': downloadOfficial(t.dataset.id, t).then(ok => { if (ok) closePreview(); }); break;
+    case 'pv-print': { const id = t.dataset.id; closePreview(); printOfficial(id); break; }
     case 'close-drawer': closeDrawer(true); break;
     case 'close-viewer': closeViewer(); break;
     case 'print': printCase(t.dataset.id); break;
@@ -2157,6 +2337,12 @@ document.addEventListener('click', e => {
     case 'prev': goStep(W.step - 1); break;
     case 'go-step': goStep(Number(t.dataset.step)); break;
     case 'submit': submitWizard(); break;
+    case 'wiz-preview': {
+      const base = W.id ? getCase(W.id) : null;
+      openPreview(normalize(Object.assign({ id: W.id || 'MECC-DRAFT', status: W.status || 'draft', createdAt: new Date().toISOString() },
+        base ? { history: base.history, returnComments: base.returnComments } : { history: [], returnComments: [] }, serialize(W.d))));
+      break;
+    }
     case 'locate': useMyLocation(); break;
     case 'clear-loc': clearLocation(); break;
     case 'clear-sig': clearSig(t.dataset.key); break;
@@ -2208,6 +2394,9 @@ document.addEventListener('input', e => {
   if (t.id === 'decNote') { t.removeAttribute('aria-invalid'); $('#decErr').textContent = ''; return; }
   if (W && t.closest('#wizard') && t.type !== 'file') onWizardField(t);
 });
+document.addEventListener('submit', e => {
+  if (e.target.id === 'loginForm') { e.preventDefault(); submitLogin(); }
+});
 document.addEventListener('change', e => {
   const t = e.target;
   if (!W || !t.closest('#wizard')) return;
@@ -2226,6 +2415,7 @@ document.addEventListener('keydown', e => {
   }
 });
 $('#viewer').addEventListener('click', e => { if (e.target.id === 'viewer') closeViewer(); });
+$('#previewDlg').addEventListener('close', () => { $('#pvBody').innerHTML = ''; pv.c = null; });
 window.addEventListener('hashchange', render);
 window.addEventListener('storage', e => { if (e.key === KEY || e.key === null) { cache = null; if (!W) render(); } });
 window.addEventListener('pagehide', () => { if (W && W.saveTimer) saveNow(); });
@@ -2242,7 +2432,7 @@ $('.side-head .icon-btn').innerHTML = icon('close', 'ic-lg');
 $('#viewer .icon-btn').innerHTML = icon('close', 'ic-lg');
 updateNet();
 updateStorageUse();
-if (!location.hash) history.replaceState(null, '', '#home');
+if (!location.hash) history.replaceState(null, '', currentUser() ? PORTALS[currentUser().role].h : '#login');
 // In an embedded viewer, open with marked example reports the first time so the workflow is visible.
 try {
   if (EMBEDDED && !readCases().length && !localStorage.getItem(SAMPLE_FLAG)) {
