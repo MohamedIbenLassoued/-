@@ -657,6 +657,59 @@ dialog.confirm{width:min(92vw,440px)}
 .paper .p-sign em{display:block;margin-bottom:3mm}
 .paper .p-sign .p-line{border-top:1px dotted #555;padding-top:6px}
 .paper .p-note{font-size:9pt;border:1px dashed #999;padding:6px 8px;margin-top:12px}
+
+/* =========================================================
+   Simple look — plain, basic styling (overrides everything above)
+   ========================================================= */
+:root{--r-lg:5px;--r:5px;--r-sm:4px;--sh:none;--sh-lg:0 2px 8px rgba(0,0,0,.18);--bg:#f3f3f3;--line:#d4d4d4;--line-strong:#b8b8b8;--maroon-50:#f6eef1;--surface-2:#f7f7f7}
+*{transition:none!important}
+body{font-size:15px}
+h1{font-size:1.3rem}
+.card,.rcard,.stat,.sys-card,.login-card,.stepper,.table-wrap,.hero,.id-band,.demo-acc,.vcard,.pcard,.lv-item,.opt-card,.chip-box,
+details.legal,.save-state,.filters a,.seg,.seg label,.error-summary,.msg,.legal-note,.return-note,.btn,.step-pills button,.sys-go,.vnum,.vcheck,
+input,select,textarea,.sig-pad,.gallery figure,.kv,.counter,.badge,.portal-pill,.sys-role,.id-chip,.pthumb,.bottomnav a,.side-nav a,.pgps,dialog.viewer,dialog.preview{border-radius:4px!important;box-shadow:none!important;background-image:none!important}
+/* header & sidebar */
+.brand-mark{display:none!important}
+.portal-pill{background:transparent!important;border-color:rgba(255,255,255,.5)!important}
+.localbar{background:#fffbe6;font-weight:400}
+.localbar .dot{display:none}
+.sidebar{background:#fff!important;color:var(--text)!important;border-inline-end:1px solid var(--line)}
+.sidebar .side-nav a{color:var(--text)}
+.sidebar .side-nav a:hover{background:#efefef}
+.sidebar .side-nav a[aria-current="page"]{background:var(--maroon);color:#fff}
+.side-head,.side-foot{border-color:var(--line)!important}
+.side-head .icon-btn,.side-user{color:var(--text)!important}
+.side-label{color:var(--muted);opacity:1}
+.sidebar :focus-visible{outline-color:var(--maroon)}
+/* bands become plain boxes */
+.id-band{background:#fff!important;color:var(--text)!important;border:1px solid var(--line)!important;padding:16px!important}
+.id-band h1,.id-band h2,.id-band p,.hero .lead{color:var(--text)!important}
+.id-eyebrow{color:var(--muted)!important}
+.btn.on-dark{background:var(--maroon)!important;color:#fff!important}
+.hero{display:block!important}
+.hero .btn{width:auto!important;margin-top:12px!important}
+/* login: one simple column */
+body.auth .login{grid-template-columns:minmax(0,1fr)!important;max-width:460px!important;min-height:0!important;padding:16px 0!important;gap:12px!important}
+body.auth .login-band{margin:0!important;padding:16px!important;display:block!important}
+body.auth .login-band h1{font-size:1.4rem!important;margin:8px 0 4px!important}
+body.auth .login .login-card{margin:0!important;max-width:none!important;border:1px solid var(--line)!important;padding:16px!important;display:block!important}
+.demo-acc .ic,.id-org .brand-mark{display:none}
+/* fewer decorations */
+.btn .ic,.rmeta .ic,.sec-head .ic,.card-head h3 .ic,.lv-box h3 .ic,.msg>.ic,.legal-note>.ic,.sys-ic,.sys-go,.vtag,.toast .ic,.stat::before,.badge::before,.sig-actions .ic{display:none!important}
+.stat strong{color:var(--text)!important}
+.stat{border-color:var(--line)!important}
+.badge{font-weight:600;border:1px solid var(--line)}
+.rcard.is-returned{border-inline-start-width:3px}
+.sys-card{padding:14px!important}
+.sys-card.main{border-color:var(--maroon)!important}
+.vcard{padding:12px!important}
+.vcard.on,.vcard:has(input:checked){background:var(--maroon-50)!important}
+.vnum{background:#fff!important}
+.step-pills [aria-current="step"]{background:#fff!important}
+.bottomnav a.accent .bn-icon{background:none!important;color:inherit!important;width:auto!important;height:auto!important}
+.bottomnav{box-shadow:none!important}
+.decision .legal-note,.legal-note{border-style:solid}
+details.legal summary .ic{display:none}
 </style>
 </head>
 <body>
