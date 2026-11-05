@@ -509,14 +509,15 @@ const WASTE_SYSTEM_URL = '';
 function renderSystems(view, user) {
   view.innerHTML =
     '<section class="id-band hub-band"><p class="id-eyebrow">نظام الرصد</p><h1>' + greeting() + '، ' + esc(user.name) + '</h1>' +
-      '<p>اختر نوع الرصد للمتابعة.</p><span class="id-chip">' + icon(PORTALS[user.role].icon) + esc(user.title) + '</span></section>' +
+      '<p>اختر نوع الرصد للمتابعة.</p></section>' +
     '<div class="sys-grid">' +
       '<a class="sys-card" href="#waste"><span class="sys-ic">' + icon('trash', 'ic-lg') + '</span>' +
-        '<h2>رصد المخلفات</h2><p>رصد المخلفات البرية.</p><span class="go">فتح' + icon('next') + '</span></a>' +
+        '<span class="sys-body"><h2>رصد المخلفات</h2><p>رصد المخلفات البرية.</p></span>' +
+        '<span class="sys-go" aria-hidden="true">' + icon('next') + '</span></a>' +
       '<a class="sys-card main" href="' + PORTALS[user.role].h + '"><span class="sys-ic">' + icon('scale', 'ic-lg') + '</span>' +
-        '<h2>رصد المخالفات</h2><p>نظام المحاضر: تحرير محاضر الضبط ومراجعتها واعتمادها.</p>' +
-        '<span class="sys-role">' + icon(PORTALS[user.role].icon) + esc(PORTALS[user.role].long) + '</span>' +
-        '<span class="go">الدخول إلى نظام المحاضر' + icon('next') + '</span></a>' +
+        '<span class="sys-body"><h2>رصد المخالفات</h2><p>نظام المحاضر: تحرير محاضر الضبط ومراجعتها واعتمادها.</p>' +
+        '<small class="sys-role">الدخول إلى ' + esc(PORTALS[user.role].long) + '</small></span>' +
+        '<span class="sys-go" aria-hidden="true">' + icon('next') + '</span></a>' +
     '</div>' +
     '<div class="hub-foot"><button class="btn ghost" type="button" data-action="logout">' + icon('logout') + 'تسجيل الخروج</button></div>';
   return 'اختيار النظام';

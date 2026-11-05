@@ -440,8 +440,9 @@ dialog.viewer::backdrop{background:rgba(20,10,14,.7)}
 .btn.on-dark:hover{background:var(--maroon-50)}
 .hero.id-band{border-top:0}
 .hero .lead{color:rgba(255,255,255,.9)}
-.hub-band{margin-bottom:16px}
-.hub-band h1{margin:2px 0 4px}
+.hub-band{margin-bottom:14px;padding:18px}
+.hub-band h1{margin:2px 0 2px;font-size:1.35rem}
+@media (min-width:768px){.hub-band{padding:24px}.hub-band h1{font-size:1.7rem}}
 /* login */
 body.auth .login{display:grid;grid-template-columns:minmax(0,1fr);justify-items:stretch;align-content:start;gap:0;max-width:980px;min-height:0;margin:0 auto;padding:0}
 .login-band{margin:-16px calc(var(--gutter) * -1) 0;border-radius:0 0 24px 24px;padding:26px 20px 64px}
@@ -485,17 +486,19 @@ body.auth .login .login-card{margin:-44px auto 0;position:relative;width:100%;ma
 body.hub .sidebar,body.hub .bottomnav,body.hub #backdrop,body.hub #menuBtn{display:none!important}
 body.hub .app{display:block}
 body.hub main{max-width:880px;padding-bottom:32px}
-.sys-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
-.sys-card{display:flex;flex-direction:column;gap:8px;padding:20px;border-radius:18px;background:#fff;border:1px solid var(--line);box-shadow:var(--sh);text-decoration:none;color:var(--text);min-height:180px;min-width:0}
-.sys-card:hover{border-color:var(--maroon-200);background:var(--maroon-50)}
-.sys-card.main{border-top:5px solid var(--maroon)}
-.sys-ic{width:56px;height:56px;border-radius:16px;background:var(--maroon-50);color:var(--maroon);display:grid;place-items:center;flex:none}
-.sys-card.main .sys-ic{background:var(--maroon);color:#fff}
-.sys-card h2{font-size:1.3rem;margin-top:4px}
-.sys-card p{color:var(--text-2)}
-.sys-role{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;font-size:.8rem;font-weight:700;color:var(--maroon-ink);background:var(--maroon-50);border:1px solid var(--maroon-200);border-radius:99px;padding:2px 10px}
-.sys-role .ic{width:16px;height:16px}
-.sys-card .go{margin-top:auto;display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--maroon);min-height:32px}
+.sys-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.sys-card{display:flex;align-items:center;gap:14px;padding:16px;border-radius:16px;background:#fff;border:1px solid var(--line);box-shadow:var(--sh);text-decoration:none;color:var(--text);min-width:0;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s}
+.sys-card:active{background:var(--maroon-50)}
+@media (hover:hover){.sys-card:hover{border-color:var(--maroon-200)}.sys-card:hover .sys-go{background:var(--maroon);color:#fff}}
+.sys-card.main{border-color:var(--maroon-200)}
+.sys-ic{width:52px;height:52px;border-radius:14px;background:var(--maroon-50);border:1px solid var(--maroon-100);color:var(--maroon);display:grid;place-items:center;flex:none}
+.sys-card.main .sys-ic{background:var(--maroon);border-color:var(--maroon);color:#fff}
+.sys-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.sys-card h2{font-size:1.08rem;margin:0}
+.sys-card p{color:var(--text-2);font-size:.88rem;line-height:1.55}
+.sys-role{color:var(--maroon);font-size:.78rem;font-weight:700;margin-top:2px}
+.sys-go{width:36px;height:36px;border-radius:50%;background:var(--surface-2);border:1px solid var(--line);color:var(--maroon);display:grid;place-items:center;flex:none;transition:background .15s,color .15s}
+.sys-go .ic{width:18px;height:18px}
 .hub-foot{display:flex;justify-content:center;margin-top:18px}
 .sys-page{display:flex;flex-direction:column;gap:10px;align-items:flex-start;padding:24px;margin-top:6px}
 @media (min-width:700px){.sys-grid{grid-template-columns:1fr 1fr}}
