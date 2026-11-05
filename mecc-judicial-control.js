@@ -100,8 +100,8 @@ const SETTLEMENT = { '': 'لم يحدد', offered: 'تم عرض الصلح', not
 const OFFENDER_TYPE = { person: 'شخص', company: 'شركة' };
 const PHOTO_CAT = { field: 'صورة ميدانية', support: 'دليل داعم' };
 const LOC_SOURCE = { gps: 'GPS الجهاز', map: 'تحديد على الخريطة', manual: 'إدخال يدوي' };
-const STEPS = ['الموقع والزمان', 'المخالفات والأدلة', 'بيانات المخالف والمراجعة'];
-const STEPS_SHORT = ['الموقع', 'المخالفات', 'المخالف'];
+const STEPS = ['الموقع والزمان والصور', 'المخالفات', 'بيانات المخالف والمراجعة'];
+const STEPS_SHORT = ['الموقع والصور', 'المخالفات', 'المخالف'];
 
 const LEGAL_NOTE = 'العقوبات والإشارات القانونية معروضة للاطلاع فقط. لا يحتسب النظام أي غرامة، ولا يقرر الإدانة، ولا يطبق أي عقوبة؛ القرار القانوني يصدر بعد المراجعة الرسمية من الجهة المختصة.';
 const SIGN_NOTE = 'تسجيل حالة التوقيع إجراء توثيقي فقط، ولا يُعد توقيع المخالف أو رفضه للتوقيع إقراراً بالمخالفة أو نفياً لها.';
@@ -1008,7 +1008,7 @@ function wizardHTML(rec) {
 
   /* ---------- STEP 1 ---------- */
   '<section class="panel" id="panel1" aria-labelledby="ph1">' +
-    '<h2 class="sr-only" id="ph1" tabindex="-1">الخطوة 1: الموقع والزمان</h2>' +
+    '<h2 class="sr-only" id="ph1" tabindex="-1">الخطوة 1: الموقع والزمان والصور</h2>' +
     '<div id="err1"></div>' +
     '<div class="card">' +
       '<h3 style="margin-bottom:12px">زمان الضبط</h3>' +
@@ -1035,24 +1035,6 @@ function wizardHTML(rec) {
       '<div class="map-box" id="mapBox" hidden><div class="map" id="map" role="application" aria-label="خريطة لتحديد موقع المخالفة"></div><p class="map-hint" id="mapHint">اضغط على الخريطة لوضع علامة موقع المخالفة. موقع الخريطة الافتراضي لا يُعتبر موقعاً محدداً.</p></div>' +
       '<div class="field" style="margin-top:14px"><label for="f-place">وصف الموقع</label><textarea id="f-place" data-f="place" rows="2" placeholder="مثال: منطقة الخريب – شمال الطريق الرئيسي بنحو 2 كم">' + esc(d.place) + '</textarea><p class="hint">مطلوب إذا تعذر تحديد الإحداثيات.</p></div>' +
     '</div>' +
-  '</section>' +
-
-  /* ---------- STEP 2 ---------- */
-  '<section class="panel" id="panel2" aria-labelledby="ph2" hidden>' +
-    '<h2 class="sr-only" id="ph2" tabindex="-1">الخطوة 2: المخالفات والأدلة</h2>' +
-    '<div id="err2"></div>' +
-    '<div class="card">' +
-      '<div class="v-toolbar"><h3 id="vH">المخالفات المضبوطة <span class="req">*</span></h3><span class="v-count" id="vCount" aria-live="polite"></span></div>' +
-      '<p class="hint" style="margin:-4px 0 12px">اضغط على البطاقة لاختيار المخالفة أو إلغاء اختيارها. يمكن اختيار أكثر من مخالفة.</p>' +
-      legacyNote +
-      '<div class="vlist" role="group" aria-labelledby="vH" id="vList" tabindex="-1">' + vgroups + '</div>' +
-      '<div class="field" style="margin-top:16px"><label for="f-notes">شرح المخالفة</label><textarea id="f-notes" data-f="notes" rows="4" placeholder="وصف الواقعة كما شوهدت في الموقع">' + esc(d.notes) + '</textarea></div>' +
-      '<details class="legal"><summary>' + icon('scale') + 'الإطار القانوني والعقوبات المقررة (للاطلاع فقط)</summary><div class="body">' +
-        '<div class="legal-note" style="margin-bottom:10px">' + icon('info') + '<span>' + LEGAL_NOTE + '</span></div>' +
-        '<p class="label">محضر ضبط مخالفة بموجب أحكام:</p><ul>' + LAWS.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>' +
-        Object.values(PENALTIES).map(p => '<div class="pen"><b>' + p.range + '</b>' + esc(p.text) + '</div>').join('') +
-      '</div></details>' +
-    '</div>' +
     '<div class="card" id="evCard">' +
       '<div class="card-head"><h3 id="evH">الأدلة والصور <span class="req">*</span></h3><span class="counter" id="photoCount">0 / ' + MAX_PHOTOS + '</span></div>' +
       '<p class="hint" style="margin:-4px 0 12px">حتى ' + MAX_PHOTOS + ' صور، بحد أقصى 10 م.ب للصورة الواحدة. الصيغ المقبولة: JPG وPNG وWEBP. تُحفظ نسخة عرض مصغّرة فقط.</p>' +
@@ -1065,6 +1047,24 @@ function wizardHTML(rec) {
       '<div class="busy" id="photoBusy" hidden><span class="spinner" aria-hidden="true"></span><span>جارٍ تجهيز الصور…</span></div>' +
       '<div id="photoMsg" aria-live="assertive"></div>' +
       '<ul class="photo-list" id="photoList" aria-label="الصور المرفقة"></ul>' +
+    '</div>' +
+  '</section>' +
+
+  /* ---------- STEP 2 ---------- */
+  '<section class="panel" id="panel2" aria-labelledby="ph2" hidden>' +
+    '<h2 class="sr-only" id="ph2" tabindex="-1">الخطوة 2: المخالفات</h2>' +
+    '<div id="err2"></div>' +
+    '<div class="card">' +
+      '<div class="v-toolbar"><h3 id="vH">المخالفات المضبوطة <span class="req">*</span></h3><span class="v-count" id="vCount" aria-live="polite"></span></div>' +
+      '<p class="hint" style="margin:-4px 0 12px">اضغط على البطاقة لاختيار المخالفة أو إلغاء اختيارها. يمكن اختيار أكثر من مخالفة.</p>' +
+      legacyNote +
+      '<div class="vlist" role="group" aria-labelledby="vH" id="vList" tabindex="-1">' + vgroups + '</div>' +
+      '<div class="field" style="margin-top:16px"><label for="f-notes">شرح المخالفة</label><textarea id="f-notes" data-f="notes" rows="4" placeholder="وصف الواقعة كما شوهدت في الموقع">' + esc(d.notes) + '</textarea></div>' +
+      '<details class="legal"><summary>' + icon('scale') + 'الإطار القانوني والعقوبات المقررة (للاطلاع فقط)</summary><div class="body">' +
+        '<div class="legal-note" style="margin-bottom:10px">' + icon('info') + '<span>' + LEGAL_NOTE + '</span></div>' +
+        '<p class="label">محضر ضبط مخالفة بموجب أحكام:</p><ul>' + LAWS.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>' +
+        Object.values(PENALTIES).map(p => '<div class="pen"><b>' + p.range + '</b>' + esc(p.text) + '</div>').join('') +
+      '</div></details>' +
     '</div>' +
   '</section>' +
 
@@ -1682,13 +1682,13 @@ function validateStep(s) {
     else if (lat !== null && !validLat(lat)) e.push({ f: 'f-lat', m: 'قيمة خط العرض غير صحيحة (يجب أن تكون بين ‎-90 و 90).' });
     else if (lng !== null && !validLng(lng)) e.push({ f: 'f-lng', m: 'قيمة خط الطول غير صحيحة (يجب أن تكون بين ‎-180 و 180).' });
     else if (lat === null && !d.place.trim()) e.push({ f: 'locBtn', m: 'لم يتم تحديد موقع المخالفة. استخدم «استخدام موقعي»، أو أدخل الإحداثيات، أو اكتب وصفاً للموقع.' });
+    if (W.busy) e.push({ f: 'camInput', m: 'انتظر حتى ينتهي تجهيز الصور.' });
+    else if (!d.photos.length) e.push({ f: 'camInput', m: 'أرفق صورة واحدة على الأقل للمخالفة (التقاط صورة أو اختيار من الجهاز).' });
   }
   if (s === 2) {
     if (!d.violationNos.length) e.push({ f: 'vList', m: 'اختر مخالفة واحدة على الأقل.' });
     if (needsChips() && !d.chips.some(x => String(x).trim())) e.push({ f: 'chip0', m: 'أدخل رقم شريحة إبل واحداً على الأقل لمخالفات الرعي (البنود 1–4).' });
     d.chips.forEach((x, i) => { if (String(x).trim() && !/^[0-9A-Za-z\- ]{3,30}$/.test(latinDigits(x).trim())) e.push({ f: 'chip' + i, m: 'رقم الشريحة ' + (i + 1) + ' يحتوي على رموز غير صالحة.' }); });
-    if (W.busy) e.push({ f: 'camInput', m: 'انتظر حتى ينتهي تجهيز الصور.' });
-    else if (!d.photos.length) e.push({ f: 'camInput', m: 'أرفق صورة واحدة على الأقل للمخالفة (التقاط صورة أو اختيار من الجهاز).' });
   }
   if (s === 3) {
     if (!d.person.trim()) e.push({ f: 'f-person', m: 'أدخل اسم المخالف.' });
@@ -1738,16 +1738,16 @@ function renderReview() {
   const c = currentCoords();
   const sec = (title, step, body) => '<div style="padding:12px 0;border-bottom:1px solid var(--line)"><div class="review-sec-head"><h3>' + title + '</h3><button class="btn ghost sm" type="button" data-action="go-step" data-step="' + step + '">' + icon('edit') + 'تعديل</button></div>' + body + '</div>';
   $('#reviewBox').innerHTML = '<h3 style="font-size:1.1rem">مراجعة المحضر قبل التسليم</h3>' +
-    sec('الموقع والزمان', 1, kvRows([
+    sec('الموقع والزمان والصور', 1, kvRows([
       ['التاريخ', fmtDate(d.date) + ' · ' + esc(fmtTime12(d.time))],
       ['المفتش', esc(d.inspectorName || '—')],
       ['الموقع', esc(d.place || '—')],
-      ['الإحداثيات', c.ok ? ltr(c.lat.toFixed(6) + ', ' + c.lng.toFixed(6)) + (d.accuracy != null ? ' · ±' + d.accuracy + ' م' : '') : 'غير محددة']
+      ['الإحداثيات', c.ok ? ltr(c.lat.toFixed(6) + ', ' + c.lng.toFixed(6)) + (d.accuracy != null ? ' · ±' + d.accuracy + ' م' : '') : 'غير محددة'],
+      ['الصور', d.photos.length ? d.photos.length + ' من ' + MAX_PHOTOS + ' (' + d.photos.filter(p => p.category === 'field').length + ' ميدانية، ' + d.photos.filter(p => p.category === 'support').length + ' دليل داعم)' : '<span class="field-error">لا توجد صور</span>']
     ])) +
-    sec('المخالفات والأدلة', 2,
+    sec('المخالفات', 2,
       (d.violationNos.length ? '<ul class="vsum">' + d.violationNos.map(n => '<li><span class="vnum">' + n + '</span><span>' + esc(VBY[n].text) + '</span></li>').join('') + '</ul>' : '<p class="field-error">لم يتم اختيار مخالفات.</p>') +
-      (needsChips() ? '<p style="margin-top:8px"><b>أرقام الشرائح:</b> ' + (d.chips.filter(x => String(x).trim()).map(x => ltr(latinDigits(x).trim())).join('، ') || '<span class="field-error">غير مدخلة</span>') + '</p>' : '') +
-      '<p style="margin-top:8px"><b>الصور:</b> ' + d.photos.length + ' من ' + MAX_PHOTOS + (d.photos.length ? ' (' + d.photos.filter(p => p.category === 'field').length + ' ميدانية، ' + d.photos.filter(p => p.category === 'support').length + ' دليل داعم)' : '') + '</p>') +
+      (needsChips() ? '<p style="margin-top:8px"><b>أرقام الشرائح:</b> ' + (d.chips.filter(x => String(x).trim()).map(x => ltr(latinDigits(x).trim())).join('، ') || '<span class="field-error">غير مدخلة</span>') + '</p>' : '')) +
     sec('التوقيعات', 3, kvRows([
       ['توقيع المخالف', d.signature === 'signed' ? (d.offenderSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>') : esc(SIGNATURE[d.signature])],
       ['توقيع المفتش', d.inspectorSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>']
