@@ -99,7 +99,7 @@ const SIGNATURE = { unspecified: 'لم يحدد', signed: 'وقّع', refused: '
 const SETTLEMENT = { '': 'لم يحدد', offered: 'تم عرض الصلح', not_offered: 'لم يُعرض الصلح' };
 const OFFENDER_TYPE = { person: 'شخص', company: 'شركة' };
 const PHOTO_CAT = { field: 'صورة ميدانية', support: 'دليل داعم' };
-const LOC_SOURCE = { gps: 'GPS الجهاز', map: 'تحديد على الخريطة', manual: 'إدخال يدوي' };
+const LOC_SOURCE = { gps: 'GPS الجهاز', photo: 'من بيانات الصورة', map: 'تحديد على الخريطة', manual: 'إدخال يدوي' };
 const STEPS = ['الموقع والزمان والصور', 'المخالفات', 'بيانات المخالف والمراجعة'];
 const STEPS_SHORT = ['الموقع والصور', 'المخالفات', 'المخالف'];
 
@@ -1024,10 +1024,11 @@ function wizardHTML(rec) {
       '<button class="btn primary lg loc-btn" type="button" id="locBtn" data-action="locate">' + icon('locate') + '<span>استخدام موقعي</span></button>' +
       '<div id="locMsg" role="status" aria-live="polite"></div>' +
       '<div class="coord-grid">' +
-        '<div class="field"><label for="f-lat">خط العرض (Latitude)</label><input id="f-lat" type="text" class="num-input" inputmode="decimal" data-f="lat" value="' + esc(W.raw.lat) + '" placeholder="25.285447" autocomplete="off" spellcheck="false"></div>' +
+        '<div class="field"><label for="f-lat">خط العرض (Latitude)</label><input id="f-lat" type="text" class="num-input" inputmode="decimal" data-f="lat" value="' + esc(W.raw.lat) + '" placeholder="25.285447" autocomplete="off" spellcheck="false" aria-describedby="latHint"></div>' +
         '<div class="field"><label for="f-lng">خط الطول (Longitude)</label><input id="f-lng" type="text" class="num-input" inputmode="decimal" data-f="lng" value="' + esc(W.raw.lng) + '" placeholder="51.531040" autocomplete="off" spellcheck="false"></div>' +
         '<div class="field acc"><label for="f-acc">الدقة (متر)</label><input id="f-acc" type="text" class="num-input" readonly value="' + (d.accuracy != null ? '±' + Math.round(d.accuracy) : '') + '" placeholder="تُعبأ تلقائياً من GPS" aria-describedby="accHint"><p class="hint" id="accHint">تُحدَّد تلقائياً عند استخدام موقع الجهاز.</p></div>' +
       '</div>' +
+      '<p class="hint" style="margin-top:-6px" id="latHint">يمكن لصق الإحداثيات معاً في حقل خط العرض، مثل <bdi dir="ltr">25.4495, 51.2234</bdi>، أو لصق رابط من الخرائط.</p>' +
       '<div class="loc-actions">' +
         (EMBEDDED ? '' : '<button class="btn secondary" type="button" data-action="open-map" id="mapBtn">' + icon('map') + 'تحديد على الخريطة</button>') +
         '<button class="btn ghost" type="button" data-action="clear-loc">' + icon('close') + 'مسح الإحداثيات</button>' +
@@ -1218,6 +1219,12 @@ function onWizardField(t) {
     if (t.type === 'radio' && !t.checked) return;
     t.removeAttribute('aria-invalid');
     if (f === 'lat' || f === 'lng') {
+      const both = /[,،;\s]\s*-?\d/.test(latinDigits(t.value).trim()) ? parseCoordText(t.value) : null;
+      if (both) {
+        setLocation(both.lat, both.lng, null, 'manual');
+        locMsg('ok', 'تم إدخال الإحداثيات: خط العرض ' + ltr(both.lat.toFixed(6)) + ' وخط الطول ' + ltr(both.lng.toFixed(6)) + '.');
+        return;
+      }
       W.raw[f] = t.value;
       W.d.locSource = 'manual';
       W.d.accuracy = null;
@@ -1471,7 +1478,7 @@ function useMyLocation() {
     if (!done(false)) return;
     if (EMBEDDED && err.code === 1) {
       // Device location is blocked by the hosting viewer itself, not by the inspector's settings.
-      locMsg('info', '<strong>تحديد الموقع التلقائي غير متاح في نسخة العرض هذه</strong>أدخل خط العرض وخط الطول يدوياً (يمكن نسخهما من تطبيق الخرائط في الهاتف)، أو اكتب وصفاً للموقع. يعمل GPS عند فتح ملف التطبيق مباشرة في المتصفح.');
+      locMsg('info', locationBlockedHelp());
       const lat = $('#f-lat'); if (lat && !lat.value) lat.focus();
       return;
     }
@@ -1587,6 +1594,59 @@ function toJpeg(img, max, q) {
   if (!out || out.length < 100) throw new Error('canvas');
   return out;
 }
+/* Read GPS coordinates stored by the camera in a JPEG (EXIF). Returns {lat,lng} or null. */
+async function readExifGps(file) {
+  try {
+    const v = new DataView(await file.slice(0, 256 * 1024).arrayBuffer());
+    if (v.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return null;
+    let off = 2;
+    while (off + 4 <= v.byteLength) {
+      const marker = v.getUint16(off);
+      if ((marker & 0xFF00) !== 0xFF00 || marker === 0xFFDA) return null;
+      const size = v.getUint16(off + 2);
+      if (marker === 0xFFE1 && off + 10 <= v.byteLength && v.getUint32(off + 4) === 0x45786966) return parseExifGps(v, off + 10);
+      off += 2 + size;
+    }
+  } catch (e) { /* no usable EXIF */ }
+  return null;
+}
+function parseExifGps(v, t) {
+  const le = v.getUint16(t) === 0x4949;
+  const u16 = o => v.getUint16(t + o, le), u32 = o => v.getUint32(t + o, le);
+  const ifd0 = u32(4);
+  let gps = 0;
+  for (let i = 0, n = u16(ifd0); i < n; i++) { const e = ifd0 + 2 + i * 12; if (u16(e) === 0x8825) gps = u32(e + 8); }
+  if (!gps) return null;
+  const tags = {};
+  for (let i = 0, n = u16(gps); i < n; i++) {
+    const e = gps + 2 + i * 12, tag = u16(e), type = u16(e + 2), cnt = u32(e + 4);
+    if (type === 2) tags[tag] = String.fromCharCode(v.getUint8(t + e + 8));
+    else if (type === 5) { const o = u32(e + 8); tags[tag] = Array.from({ length: Math.min(cnt, 3) }, (_, k) => u32(o + k * 8) / (u32(o + k * 8 + 4) || 1)); }
+  }
+  if (!tags[2] || !tags[4] || tags[2].length < 3 || tags[4].length < 3) return null;
+  const dms = a => a[0] + a[1] / 60 + a[2] / 3600;
+  let lat = dms(tags[2]), lng = dms(tags[4]);
+  if (tags[1] === 'S') lat = -lat;
+  if (tags[3] === 'W') lng = -lng;
+  if (!validLat(lat) || !validLng(lng) || (Math.abs(lat) < 1e-6 && Math.abs(lng) < 1e-6)) return null;
+  return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, acc: tags[31] ? Math.round(tags[31][0]) : null };
+}
+/* Accepts "25.4495, 51.2234", "N 25.4495 E 51.2234", or a Google/Apple Maps link. */
+function parseCoordText(text) {
+  const t = latinDigits(String(text || '')).replace(/[٫]/g, '.').replace(/،/g, ',');
+  const m = t.match(/@(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/) || t.match(/[?&](?:q|query|ll|daddr|center)=(-?\d{1,2}\.\d+)(?:,|%2C)\s*(-?\d{1,3}\.\d+)/i) ||
+    t.match(/(-?\d{1,2}\.\d{3,})\s*°?\s*[NnSs]?\s*[,;\s]\s*[EeWw]?\s*(-?\d{1,3}\.\d{3,})/) || t.match(/[Nn]\s*(-?\d{1,2}\.\d+)[^\d-]+[Ee]\s*(-?\d{1,3}\.\d+)/);
+  if (!m) return null;
+  const lat = Number(m[1]), lng = Number(m[2]);
+  return validLat(lat) && validLng(lng) ? { lat, lng } : null;
+}
+function locationBlockedHelp() {
+  return '<strong>تحديد الموقع التلقائي غير متاح داخل claude.ai</strong>' +
+    'المنصة تمنع الصفحات المنشورة من الوصول إلى موقع الجهاز، ولا يوجد إعداد يغيّر ذلك. البدائل:' +
+    '<ul><li><b>من الصورة:</b> التقط صورة المخالفة أدناه؛ إذا كانت الكاميرا تحفظ الموقع تُملأ الإحداثيات تلقائياً.</li>' +
+    '<li><b>من الخرائط:</b> افتح <a href="https://www.google.com/maps" target="_blank" rel="noopener">خرائط Google</a>، اضغط مطولاً على موقعك وانسخ الإحداثيات، ثم الصقها في حقل خط العرض (يُملأ الحقلان معاً).</li>' +
+    '<li>أو اكتب وصف الموقع. يعمل GPS مباشرة عند فتح التطبيق من ملفه أو من رابط https.</li></ul>';
+}
 async function processImage(f) {
   if (f.size === 0) throw new Error('الملف فارغ أو تالف.');
   if (f.size > MAX_BYTES) throw new Error('حجم الملف ' + fmtBytes(f.size) + ' يتجاوز الحد المسموح (10 م.ب). خفّض دقة الكاميرا (مثل 12 ميغابكسل) ثم أعد الالتقاط.');
@@ -1604,7 +1664,8 @@ async function processImage(f) {
   catch (e) { throw new Error('تعذر تجهيز معاينة الصورة.'); }
   return {
     id: uid('ph_'), preview, thumb, caption: '', category: 'field',
-    name: f.name || 'صورة', type: actual, origSize: f.size, w: img.naturalWidth, h: img.naturalHeight, addedAt: new Date().toISOString()
+    name: f.name || 'صورة', type: actual, origSize: f.size, w: img.naturalWidth, h: img.naturalHeight, addedAt: new Date().toISOString(),
+    gps: actual === 'image/jpeg' ? await readExifGps(f) : null
   };
 }
 async function addPhotos(fileList) {
@@ -1635,6 +1696,11 @@ async function addPhotos(fileList) {
   $('#photoMsg').innerHTML = errors.length ? '<div class="msg bad" style="margin-top:12px">' + icon('alert') + '<div><strong>تعذر إضافة بعض الملفات</strong><ul>' + errors.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul></div></div>'
     : added ? '<p class="sr-only">تمت إضافة ' + added + ' صورة.</p>' : '';
   if (added) {
+    const withGps = W.d.photos.slice(-added).find(ph => ph.gps);
+    if (withGps && !currentCoords().ok) {
+      setLocation(withGps.gps.lat, withGps.gps.lng, withGps.gps.acc, 'photo');
+      locMsg('ok', '<strong>تم تحديد الموقع من بيانات الصورة</strong>الإحداثيات مأخوذة من الموقع الذي حفظته الكاميرا داخل الصورة. تحقق منها قبل المتابعة.');
+    }
     refreshValidation();
     if (!saveNow()) {
       $('#photoMsg').insertAdjacentHTML('beforeend', '<div class="msg bad" style="margin-top:12px">' + icon('alert') + '<div>تعذر حفظ الصور محلياً بسبب امتلاء مساحة التخزين. احذف بعض الصور أو المسودات القديمة.</div></div>');
@@ -1656,7 +1722,8 @@ function renderPhotos() {
     const n = i + 1;
     return '<li class="pcard">' +
       '<button class="pthumb" type="button" data-action="zoom" data-id="' + esc(p.id) + '" aria-label="عرض الصورة ' + n + ' بحجم أكبر"><img src="' + esc(p.thumb || p.preview) + '" alt="" decoding="async"></button>' +
-        '<div class="ptop"><span class="meta"><b>صورة ' + n + '</b>' + (p.origSize ? fmtBytes(p.origSize) + ' · ' : '') + (p.w ? ltr(p.w + '×' + p.h) : 'صورة سابقة') + '</span>' +
+        '<div class="ptop"><span class="meta"><b>صورة ' + n + '</b>' + (p.origSize ? fmtBytes(p.origSize) + ' · ' : '') + (p.w ? ltr(p.w + '×' + p.h) : 'صورة سابقة') +
+          (p.gps ? '<button class="pgps" type="button" data-action="photo-loc" data-id="' + esc(p.id) + '">' + icon('pin') + 'استخدام موقع الصورة</button>' : '') + '</span>' +
         '<button class="icon-btn danger" type="button" data-action="del-photo" data-id="' + esc(p.id) + '" aria-label="حذف الصورة ' + n + '">' + icon('trash') + '</button></div>' +
       '<div class="pbody">' +
         '<fieldset><legend class="sr-only">تصنيف الصورة ' + n + '</legend><div class="seg">' +
@@ -2430,6 +2497,15 @@ document.addEventListener('click', e => {
     case 'locate': useMyLocation(); break;
     case 'clear-loc': clearLocation(); break;
     case 'clear-sig': clearSig(t.dataset.key); break;
+    case 'photo-loc': {
+      const ph = W.d.photos.find(x => x.id === t.dataset.id);
+      if (ph && ph.gps) {
+        setLocation(ph.gps.lat, ph.gps.lng, ph.gps.acc, 'photo');
+        locMsg('ok', '<strong>تم تحديد الموقع من بيانات الصورة</strong>تحقق من الإحداثيات قبل المتابعة.');
+        $('#locCard').scrollIntoView({ block: 'start' });
+      }
+      break;
+    }
     case 'open-map': openMap(); break;
     case 'add-chip': {
       W.d.chips.push('');
@@ -2472,6 +2548,16 @@ document.addEventListener('input', e => {
   if (t.matches('[data-search="admin"]')) { fillAdminList(); return; }
   if (t.id === 'decNote') { t.removeAttribute('aria-invalid'); $('#decErr').textContent = ''; return; }
   if (W && t.closest('#wizard') && t.type !== 'file') onWizardField(t);
+});
+document.addEventListener('paste', e => {
+  const t = e.target;
+  if (!W || !(t.id === 'f-lat' || t.id === 'f-lng' || t.id === 'f-place')) return;
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  const c = parseCoordText(text);
+  if (!c || (t.id === 'f-place' && !/maps|@-?\d|[?&](q|ll)=/i.test(text))) return;
+  e.preventDefault();
+  setLocation(c.lat, c.lng, null, 'manual');
+  locMsg('ok', 'تم لصق الإحداثيات: خط العرض ' + ltr(c.lat.toFixed(6)) + ' وخط الطول ' + ltr(c.lng.toFixed(6)) + '.');
 });
 document.addEventListener('submit', e => {
   if (e.target.id === 'loginForm') { e.preventDefault(); submitLogin(); }
