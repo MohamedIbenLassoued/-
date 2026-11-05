@@ -1292,6 +1292,7 @@ function toggleViolation(no, on) {
   const set = new Set(W.d.violationNos);
   if (on) set.add(no); else set.delete(no);
   W.d.violationNos = Array.from(set).sort((a, b) => a - b);
+  if (on && CHIP_REQUIRED.includes(no)) W.lastGrazing = no;
   updateViolationUI();
   if (needsChips()) {
     if (!W.d.chips.length) { W.d.chips = ['']; renderChips(); }
@@ -1308,7 +1309,23 @@ function updateViolationUI() {
   $$('#vList .vcard').forEach(l => { const i = $('input', l); l.classList.toggle('on', i.checked); });
   $('#vCount').textContent = n ? 'تم اختيار ' + n + (n === 1 ? ' مخالفة' : ' مخالفات') : 'لم يتم الاختيار';
   $('#chipBox').hidden = !needsChips();
+  placeChipBox();
   $('#vList').removeAttribute('aria-invalid');
+}
+/* Camel chip numbers appear directly under the ticked grazing violation (1–4):
+   the most recently ticked one, or the last ticked grazing item still selected. */
+function placeChipBox() {
+  const box = $('#chipBox');
+  const sel = W.d.violationNos.filter(n => CHIP_REQUIRED.includes(n));
+  if (!sel.length) return;
+  const n = sel.includes(W.lastGrazing) ? W.lastGrazing : sel[sel.length - 1];
+  const card = $('label[for="v' + n + '"]');
+  if (card && card.nextElementSibling !== box) {
+    const focused = box.contains(document.activeElement) ? document.activeElement : null;
+    card.after(box);
+    if (focused) focused.focus({ preventScroll: true });
+  }
+  box.setAttribute('aria-label', 'أرقام شرائح الإبل — البند ' + n);
 }
 function renderChips() {
   const box = $('#chipList');
