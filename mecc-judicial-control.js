@@ -248,6 +248,7 @@ function normalize(raw) {
   c.offenderType = c.offenderType === 'company' ? 'company' : 'person';
   c.signature = SIGNATURE[c.signature] ? c.signature : 'unspecified';
   ['offenderSig', 'inspectorSig'].forEach(k => { c[k] = typeof c[k] === 'string' && c[k].indexOf('data:image/') === 0 ? c[k] : ''; });
+  c.officerCard = (Array.isArray(c.officerCard) ? c.officerCard : []).filter(x => x && x.preview).slice(0, 2);
   c.settlement = Object.prototype.hasOwnProperty.call(SETTLEMENT, c.settlement || '') ? (c.settlement || '') : '';
   ['date', 'time', 'place', 'municipality', 'area', 'notes', 'person', 'qid', 'phone', 'address', 'section', 'inspectorName', 'inspectorNo', 'managerNote'].forEach(k => { c[k] = c[k] == null ? '' : String(c[k]); });
   ['lat', 'lng', 'accuracy'].forEach(k => { c[k] = (c[k] === null || c[k] === undefined || c[k] === '') ? null : Number(c[k]); if (Number.isNaN(c[k])) c[k] = null; });
@@ -737,6 +738,7 @@ function detailSections(c, opts) {
     ['تاريخ الضبط', fmtDate(c.date)],
     ['الساعة', esc(fmtTime12(c.time))],
     ['المفتش', esc(c.inspectorName || '—') + (c.inspectorNo ? ' · الرقم الوظيفي ' + ltr(c.inspectorNo) : '')],
+    ['بطاقة الضبطية', c.officerCard.length ? c.officerCard.map((pg, i) => '<button class="btn ghost sm" type="button" data-action="zoom" data-kind="oc" data-case="' + esc(c.id) + '" data-id="' + esc(pg.id) + '">' + icon('eye') + (i === 0 ? 'الوجه' : 'الظهر') + '</button>').join(' ') : '—'],
     ['القسم', esc(c.section || '—')],
     ['البلدية', esc(c.municipality || '—')],
     ['المنطقة', esc(c.area || '—')],
@@ -952,7 +954,7 @@ function blankData() {
     livestock: { reqNo: '', date: '', pages: [] },
     violationNos: [], chips: [], notes: '', photos: [],
     offenderType: 'person', person: '', qid: '', phone: '', address: '', section: '', settlement: '', signature: 'unspecified',
-    offenderSig: '', inspectorSig: ''
+    offenderSig: '', inspectorSig: '', officerCard: (Array.isArray(p.officerCard) ? p.officerCard : []).slice(0, 2)
   };
 }
 function dataFromCase(c) {
@@ -984,6 +986,7 @@ function renderWizard(view, id) {
   renderLocStatus();
   renderChips();
   renderPhotos();
+  renderOfficerCard();
   updateViolationUI();
   setSaveState(rec ? 'saved' : 'idle', rec ? rec.updatedAt : null);
   setStep(1, true);
@@ -1124,6 +1127,17 @@ function wizardHTML(rec) {
       '<div id="refusedNote" class="msg warn"' + (d.signature === 'refused' ? '' : ' hidden') + '>' + icon('info') + '<div>سُجّل رفض المخالف للتوقيع. لا حاجة لتوقيع المخالف، ويُكتفى بتوقيع المفتش.</div></div>' +
       '<hr class="divider">' +
       sigPadHTML('inspectorSig', 'توقيع المفتش', true) +
+      '<hr class="divider">' +
+      '<div class="oc-box">' +
+        '<div class="card-head" style="margin-bottom:4px"><h3 id="ocH">' + icon('user') + ' بطاقة الضبطية القضائية للمفتش <span class="opt">(اختياري)</span></h3><span class="counter" id="ocCount">0 / 2</span></div>' +
+        '<p class="hint" style="margin:0 0 10px">صورة الوجه والظهر. تُحفظ على هذا الجهاز وتُرفق تلقائياً بمحاضرك القادمة، وتظهر في آخر صفحة من ملف المحضر.</p>' +
+        '<div class="photo-actions">' +
+          '<label class="btn secondary file-btn">' + icon('camera') + '<span>تصوير البطاقة</span><input type="file" id="ocCam" accept="image/*" capture="environment" data-oc-input aria-label="تصوير بطاقة الضبطية القضائية"></label>' +
+          '<label class="btn secondary file-btn">' + icon('image') + '<span>اختيار من الجهاز</span><input type="file" id="ocFile" accept="image/*" multiple data-oc-input aria-label="اختيار بطاقة الضبطية القضائية من الجهاز"></label>' +
+        '</div>' +
+        '<div id="ocMsg" aria-live="assertive"></div>' +
+        '<ul class="lv-list" id="ocList" aria-label="صور البطاقة"></ul>' +
+      '</div>' +
     '</div>' +
     '<div class="card" id="reviewBox" aria-live="off"></div>' +
     '<div class="legal-note" style="margin-top:14px">' + icon('info') + '<span>' + LEGAL_NOTE + ' التسليم هنا ينقل المحضر إلى قائمة المراجعة على هذا الجهاز فقط ولا يرسله إلى الوزارة.</span></div>' +
@@ -1193,7 +1207,7 @@ function serialize(d) {
     notes: d.notes, photos: d.photos,
     offenderType: 'person', person: d.person.trim(), qid: latinDigits(d.qid).trim(), phone: latinDigits(d.phone).trim(),
     address: d.address, settlement: d.settlement, signature: d.signature,
-    offenderSig: d.signature === 'signed' ? d.offenderSig : '', inspectorSig: d.inspectorSig
+    offenderSig: d.signature === 'signed' ? d.offenderSig : '', inspectorSig: d.inspectorSig, officerCard: d.officerCard
   };
 }
 function isEmptyDraft(d) {
@@ -1819,6 +1833,38 @@ async function addLetterPages(id, fileList) {
   }
   refreshLetterBox(id, errors.length ? '<div class="msg bad" style="margin-top:10px">' + icon('alert') + '<div><ul>' + errors.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul></div></div>' : '');
 }
+async function addOfficerCard(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length || !W) return;
+  const wizard = W, errors = [];
+  for (const f of files) {
+    if (W !== wizard) return;
+    if (W.d.officerCard.length >= 2) { errors.push('يكفي وجه البطاقة وظهرها (صورتان).'); break; }
+    try { const pg = await processImage(f, 1400); delete pg.gps; W.d.officerCard.push(pg); }
+    catch (e) { errors.push('«' + (f.name || 'صورة') + '»: ' + e.message); }
+  }
+  if (W !== wizard) return;
+  saveOfficerCardProfile();
+  renderOfficerCard();
+  $('#ocMsg').innerHTML = errors.length ? '<div class="msg bad" style="margin-top:10px">' + icon('alert') + '<div><ul>' + errors.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul></div></div>' : '';
+  if (!saveNow()) toast('تعذر حفظ صورة البطاقة محلياً: مساحة التخزين ممتلئة.', 'bad');
+}
+function saveOfficerCardProfile() {
+  const pr = getProfile();
+  pr.officerCard = W.d.officerCard;
+  setProfile(pr);
+}
+function renderOfficerCard() {
+  const ul = $('#ocList');
+  if (!ul || !W) return;
+  const list = W.d.officerCard;
+  const label = i => (i === 0 ? 'وجه البطاقة' : 'ظهر البطاقة');
+  ul.innerHTML = list.map((pg, i) => '<li class="lv-item"><button class="pthumb" type="button" data-action="zoom-oc" data-id="' + esc(pg.id) + '" aria-label="عرض ' + label(i) + '"><img src="' + esc(pg.thumb || pg.preview) + '" alt=""></button>' +
+    '<span class="meta"><b>' + label(i) + '</b>' + (pg.origSize ? fmtBytes(pg.origSize) : '') + '</span>' +
+    '<button class="icon-btn danger" type="button" data-action="del-oc" data-id="' + esc(pg.id) + '" aria-label="حذف ' + label(i) + '">' + icon('trash') + '</button></li>').join('');
+  $('#ocCount').textContent = list.length + ' / 2';
+  ['ocCam', 'ocFile'].forEach(id => { const i = document.getElementById(id); if (i) { i.disabled = list.length >= 2; i.parentNode.classList.toggle('is-disabled', list.length >= 2); } });
+}
 function setPhotoInputsDisabled(off) {
   ['camInput', 'fileInput'].forEach(id => { const i = document.getElementById(id); if (i) { i.disabled = off; i.parentNode.classList.toggle('is-disabled', off); } });
 }
@@ -2307,8 +2353,13 @@ table.w-tbl{width:100%;border-collapse:collapse;font-size:9.5px;line-height:1.33
 .w-ph-head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #8A1538;padding-bottom:6px;margin-bottom:12px;font-size:12px}
 .w-ph-head b{color:#8A1538;font-size:14px}
 .w-ph{flex:1;display:flex;flex-direction:column;gap:14px}
-.w-ph figure{margin:0;flex:none;display:flex;flex-direction:column}
-.w-ph .img{height:462px;background:#f3f3f3;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid #ccc}
+.w-ph figure,.w-grid figure,.w-side figure{margin:0;flex:none;display:flex;flex-direction:column;min-width:0}
+.w-grid{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:12px 12px;align-content:start}
+.w-side{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start}
+.w-grid .img,.w-side .img{background:#f3f3f3;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid #ccc}
+.w-grid img,.w-side img{width:100%;height:100%;object-fit:contain;display:block}
+.w-grid figcaption,.w-side figcaption{font-size:10.5px;padding-top:3px}
+.w-ph .img{background:#f3f3f3;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid #ccc}
 .w-ph img{width:100%;height:100%;object-fit:contain;display:block}
 .w-ph figcaption{font-size:11px;padding-top:4px}
 .w-lv-meta{font-size:11px;margin:0 0 8px;color:#333}
@@ -2388,30 +2439,60 @@ function wpdPage1(c) {
     '<div class="w-meta"><span>رقم المحضر: <span class="ltr">' + esc(c.id) + '</span>' + (c.status === 'approved' ? ' · اعتمده المدير: ' + esc(fmtDateTime(wpdApprovedAt(c))) : ' · الحالة: ' + esc(STATUS[c.status] ? STATUS[c.status].label : '')) + (c.locSource === 'mock' ? ' · الإحداثيات محاكاة (تجريبي)' : '') + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
   '</div>';
 }
-function wpdLetterPages(c) {
-  if (!c.livestock || !c.livestock.pages.length) return [];
-  const n = c.livestock.pages.length;
-  return c.livestock.pages.map((p, i) => '<div class="wpd-page">' + wpdWatermark(c) +
-    '<div class="w-ph-head"><b>كتاب إدارة الثروة الحيوانية — إفادة حول شريحة الإبل الإلكترونية</b><span>محضر رقم <span class="ltr">' + esc(c.id) + '</span></span></div>' +
-    '<p class="w-lv-meta">' + (c.livestock.reqNo ? 'رقم طلب الإفادة: <span class="ltr">' + esc(c.livestock.reqNo) + '</span> · ' : '') + (c.livestock.date ? 'تاريخ الإفادة: ' + esc(fmtDate(c.livestock.date)) + ' · ' : '') +
-      'أرقام الشرائح: <span class="ltr">' + esc(c.chips.join('، ') || '—') + '</span>' + (n > 1 ? ' · صفحة ' + (i + 1) + ' من ' + n : '') + '</p>' +
-    '<div class="w-lv"><img src="' + esc(p.preview) + '" alt=""></div>' +
-    '<div class="w-meta"><span>مرفق بالمحضر</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
-  '</div>');
+/* File order follows the paper file: form → field photos → Animal Resources letter (grazing)
+   → supporting evidence (e.g. chip-reader screens) → inspector's judicial officer card. */
+const WPD_FOOT = '<span>مُولَّد من النموذج التجريبي — بيانات محلية</span>';
+function wpdSheet(c, title, body, no) {
+  return '<div class="wpd-page">' + wpdWatermark(c) +
+    '<div class="w-ph-head"><b>' + title + '</b><span>محضر رقم <span class="ltr">' + esc(c.id) + '</span> · <span class="ltr">WPD/01</span></span></div>' +
+    body +
+    '<div class="w-meta"><span>صفحة ' + no + '</span>' + WPD_FOOT + '</div>' +
+  '</div>';
 }
-function wpdPhotoPages(c, first) {
-  const pages = [];
-  for (let i = 0; i < c.photos.length; i += 2) {
-    const pair = c.photos.slice(i, i + 2);
-    pages.push('<div class="wpd-page">' + wpdWatermark(c) +
-      '<div class="w-ph-head"><b>الأدلة المصورة</b><span>محضر رقم <span class="ltr">' + esc(c.id) + '</span> · <span class="ltr">WPD/01</span></span></div>' +
-      '<div class="w-ph">' + pair.map((p, j) => '<figure><div class="img"><img src="' + esc(p.preview) + '" alt=""></div><figcaption><b>' + (i + j + 1) + '. ' + esc(PHOTO_CAT[p.category]) + '</b>' + (p.caption ? ' — ' + esc(p.caption) : '') + '</figcaption></figure>').join('') + '</div>' +
-      '<div class="w-meta"><span>صفحة ' + (pages.length + (first || 2)) + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
-    '</div>');
+function wpdFig(src, cap, h) {
+  return '<figure><div class="img" style="height:' + h + 'px"><img src="' + esc(src) + '" alt=""></div>' + (cap ? '<figcaption>' + cap + '</figcaption>' : '') + '</figure>';
+}
+function photoCap(p, n) { return '<b>' + n + '. ' + esc(PHOTO_CAT[p.category]) + '</b>' + (p.caption ? ' — ' + esc(p.caption) : ''); }
+function wpdPages(c) {
+  const pages = [wpdPage1(c)];
+  const next = () => pages.length + 1;
+  const field = c.photos.filter(ph => ph.category !== 'support');
+  const support = c.photos.filter(ph => ph.category === 'support');
+  const num = ph => c.photos.indexOf(ph) + 1;
+  // field photos: first page two large, then four per page
+  const groups = [];
+  if (field.length) groups.push(field.slice(0, 2));
+  for (let i = 2; i < field.length; i += 4) groups.push(field.slice(i, i + 4));
+  groups.forEach(g => {
+    const body = g.length > 2
+      ? '<div class="w-grid">' + g.map(ph => wpdFig(ph.preview, photoCap(ph, num(ph)), 452)).join('') + '</div>'
+      : '<div class="w-ph">' + g.map(ph => wpdFig(ph.preview, photoCap(ph, num(ph)), 462)).join('') + '</div>';
+    pages.push(wpdSheet(c, 'الأدلة المصورة', body, next()));
+  });
+  // Animal Resources letter (grazing)
+  if (c.livestock && c.livestock.pages.length) {
+    const n = c.livestock.pages.length;
+    c.livestock.pages.forEach((pg, i) => pages.push(wpdSheet(c, 'كتاب إدارة الثروة الحيوانية — إفادة حول شريحة الإبل الإلكترونية',
+      '<p class="w-lv-meta">' + (c.livestock.reqNo ? 'رقم طلب الإفادة: <span class="ltr">' + esc(c.livestock.reqNo) + '</span> · ' : '') + (c.livestock.date ? 'تاريخ الإفادة: ' + esc(fmtDate(c.livestock.date)) + ' · ' : '') +
+        'أرقام الشرائح: <span class="ltr">' + esc(c.chips.join('، ') || '—') + '</span>' + (n > 1 ? ' · صفحة ' + (i + 1) + ' من ' + n : '') + '</p>' +
+      '<div class="w-lv"><img src="' + esc(pg.preview) + '" alt=""></div>', next())));
+  }
+  // supporting evidence: portrait pairs side by side, otherwise stacked
+  for (let i = 0; i < support.length; i += 2) {
+    const g = support.slice(i, i + 2);
+    const portrait = g.every(ph => (ph.h || 0) > (ph.w || 0));
+    const body = portrait && g.length === 2
+      ? '<div class="w-side">' + g.map(ph => wpdFig(ph.preview, photoCap(ph, num(ph)), 930)).join('') + '</div>'
+      : '<div class="w-ph">' + g.map(ph => wpdFig(ph.preview, photoCap(ph, num(ph)), 462)).join('') + '</div>';
+    pages.push(wpdSheet(c, 'أدلة داعمة', body, next()));
+  }
+  // inspector's judicial officer card
+  if (c.officerCard && c.officerCard.length) {
+    pages.push(wpdSheet(c, 'بطاقة الضبطية القضائية للمفتش' + (c.inspectorName ? ' — ' + esc(c.inspectorName) : ''),
+      '<div class="w-ph">' + c.officerCard.map((pg, i) => wpdFig(pg.preview, '<b>' + (i === 0 ? 'وجه البطاقة' : 'ظهر البطاقة') + '</b>', c.officerCard.length > 1 ? 462 : 940)).join('') + '</div>', next()));
   }
   return pages;
 }
-function wpdPages(c) { const lv = wpdLetterPages(c); return [wpdPage1(c)].concat(lv, wpdPhotoPages(c, 2 + lv.length)); }
 
 /* Render one page of HTML to a JPEG via SVG <foreignObject> (keeps correct Arabic shaping). */
 const BLANK_PX = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
@@ -2590,12 +2671,13 @@ document.addEventListener('click', e => {
     case 'official-print': printOfficial(t.dataset.id); break;
     case 'zoom': {
       let ph, list;
-      if (t.dataset.case) { const c = getCase(t.dataset.case); list = c ? (t.dataset.kind === 'lv' ? (c.livestock ? c.livestock.pages : []) : c.photos) : []; }
+      if (t.dataset.case) { const c = getCase(t.dataset.case); list = c ? (t.dataset.kind === 'lv' ? (c.livestock ? c.livestock.pages : []) : t.dataset.kind === 'oc' ? c.officerCard : c.photos) : []; }
       else list = W ? W.d.photos : [];
       ph = list.find(p => p.id === t.dataset.id);
       if (ph) {
         const i = list.indexOf(ph) + 1;
         if (t.dataset.kind === 'lv') openViewer(ph.preview, 'كتاب الثروة الحيوانية — صفحة ' + i, '');
+        else if (t.dataset.kind === 'oc') openViewer(ph.preview, i === 1 ? 'بطاقة الضبطية — الوجه' : 'بطاقة الضبطية — الظهر', '');
         else openViewer(ph.preview, 'صورة ' + i + ' · ' + PHOTO_CAT[ph.category], ph.caption);
       }
       break;
@@ -2644,6 +2726,16 @@ document.addEventListener('click', e => {
     case 'locate': useMyLocation(); break;
     case 'clear-loc': clearLocation(); break;
     case 'clear-sig': clearSig(t.dataset.key); break;
+    case 'del-oc': {
+      W.d.officerCard = W.d.officerCard.filter(x => x.id !== t.dataset.id);
+      saveOfficerCardProfile(); renderOfficerCard(); saveNow();
+      break;
+    }
+    case 'zoom-oc': {
+      const i = W.d.officerCard.findIndex(x => x.id === t.dataset.id);
+      if (i >= 0) openViewer(W.d.officerCard[i].preview, i === 0 ? 'وجه البطاقة' : 'ظهر البطاقة', '');
+      break;
+    }
     case 'mock-loc': mockLocate('تعذر الحصول على موقع الجهاز؛'); break;
     case 'photo-loc': {
       const ph = W.d.photos.find(x => x.id === t.dataset.id);
@@ -2716,6 +2808,7 @@ document.addEventListener('change', e => {
   if (t.matches('[data-lvr]')) { const k = t.dataset.lvr, v = latinDigits(t.value).trim(); updateCaseLetter(t.dataset.id, lv => { lv[k] = k === 'date' ? t.value : v; }); return; }
   if (!W || !t.closest('#wizard')) return;
   if (t.matches('[data-photo-input]')) { addPhotos(t.files).finally(() => { t.value = ''; }); return; }
+  if (t.matches('[data-oc-input]')) { addOfficerCard(t.files).finally(() => { t.value = ''; }); return; }
   if (t.type === 'radio' || t.type === 'checkbox' || t.tagName === 'SELECT') onWizardField(t);
 });
 document.addEventListener('keydown', e => {
