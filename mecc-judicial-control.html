@@ -427,6 +427,60 @@ dialog.viewer::backdrop{background:rgba(20,10,14,.7)}
 .viewer p{padding:10px 16px 14px;font-size:.92rem;overflow-wrap:anywhere}
 
 #printArea{display:none}
+/* ---------- UI refinements ---------- */
+.id-band{position:relative;overflow:hidden;background:var(--maroon);color:#fff;border-radius:var(--r-lg);padding:22px 18px;box-shadow:var(--sh);
+  background-image:radial-gradient(120% 90% at 0% 100%,rgba(255,255,255,.10),transparent 55%),repeating-linear-gradient(135deg,rgba(255,255,255,.035) 0 2px,transparent 2px 14px)}
+.id-band h1,.id-band h2{color:#fff;text-wrap:balance}
+.id-band p{color:rgba(255,255,255,.9)}
+.id-eyebrow{font-size:.8rem;font-weight:600;color:rgba(255,255,255,.8)!important;letter-spacing:.2px}
+.id-chip{display:inline-flex;align-items:center;gap:6px;margin-top:12px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);border-radius:99px;padding:3px 12px;font-size:.82rem;font-weight:600}
+.id-chip .ic{width:16px;height:16px}
+.id-band :focus-visible{outline-color:#fff}
+.btn.on-dark{background:#fff;color:var(--maroon);box-shadow:0 2px 10px rgba(0,0,0,.12)}
+.btn.on-dark:hover{background:var(--maroon-50)}
+.hero.id-band{border-top:0}
+.hero .lead{color:rgba(255,255,255,.9)}
+.hub-band{margin-bottom:16px}
+.hub-band h1{margin:2px 0 4px}
+/* login */
+body.auth .login{display:grid;grid-template-columns:minmax(0,1fr);justify-items:stretch;align-content:start;gap:0;max-width:980px;min-height:0;margin:0 auto;padding:0}
+.login-band{margin:-16px calc(var(--gutter) * -1) 0;border-radius:0 0 24px 24px;padding:26px 20px 64px}
+.login-band h1{font-size:1.9rem;margin:18px 0 6px}
+.id-org{display:flex;align-items:center;gap:10px}
+.id-org .brand-mark{background:#fff;color:var(--maroon)}
+.id-org strong{display:block;font-size:.95rem}
+.id-org small{display:block;font-size:.76rem;opacity:.85}
+body.auth .login .login-card{margin:-44px auto 0;position:relative;width:100%;max-width:460px;border-top:0}
+.login-card h2{font-size:1.3rem}
+.login-card .lead{color:var(--muted);margin-bottom:16px}
+.login-brand{display:none}
+@media (min-width:900px){
+  body.auth .login{grid-template-columns:1fr 1fr;align-items:stretch;align-content:center;min-height:calc(100vh - 110px);padding:28px 0}
+  body.auth .login-band{margin:0;border-radius:24px 0 0 24px;padding:40px 36px;display:flex;flex-direction:column;justify-content:flex-end}
+  [dir=rtl] body.auth .login-band{border-radius:0 24px 24px 0}
+  .login-band h1{font-size:2.4rem}
+  body.auth .login .login-card{margin:0;max-width:none;border-radius:24px 0 0 24px;display:flex;flex-direction:column;justify-content:center;padding:36px}
+}
+/* wizard stepper: compact horizontal steps on phones */
+.step-pills button{min-height:48px;flex-direction:row;gap:6px}
+.step-pills .n{width:26px;height:26px;font-size:.85rem}
+/* bottom bar items */
+.bottomnav a{font-size:.76rem}
+/* desktop breadcrumb instead of a repeated brand */
+.crumb{display:none;align-items:center;gap:6px;flex:1;min-width:0;font-size:.88rem;color:var(--muted);white-space:nowrap;overflow:hidden}
+.crumb a{color:var(--text-2);text-decoration:none;font-weight:600}
+.crumb a:hover{color:var(--maroon)}
+.crumb [aria-current]{color:var(--maroon);font-weight:700}
+.crumb .ic{width:14px;height:14px;opacity:.6}
+@media (min-width:1024px){
+  body:not(.hub):not(.auth) .topbar .brand{display:none}
+  body:not(.hub):not(.auth) .crumb{display:flex}
+}
+/* page actions side by side on phones */
+@media (max-width:767px){
+  .page-head > .btn-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+  .page-head > .btn-row .btn{min-height:44px;font-size:.9rem;padding:8px 10px}
+}
 /* نظام الرصد: system choice */
 body.hub .sidebar,body.hub .bottomnav,body.hub #backdrop,body.hub #menuBtn{display:none!important}
 body.hub .app{display:block}
@@ -619,6 +673,7 @@ dialog.confirm{width:min(92vw,440px)}
         <span class="brand-mark" aria-hidden="true">MECC</span>
         <span class="brand-text"><strong>وزارة البيئة والتغير المناخي</strong><span id="brandSub">نظام الرصد</span></span>
       </a>
+      <nav class="crumb" id="crumb" aria-label="المسار"></nav>
       <span class="portal-pill" id="portalPill">بوابة المفتش</span>
     </header>
     <div class="localbar" id="localbar" role="note">

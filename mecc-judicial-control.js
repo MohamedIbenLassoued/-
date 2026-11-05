@@ -335,7 +335,10 @@ function renderShell(portal, p) {
   $('#sideSwitch').innerHTML = u ? '<div class="side-user">' + icon('user', 'ic-lg') + '<span><b>' + esc(u.name) + '</b><small>' + esc(u.title) + '</small></span></div>' +
     '<a href="#systems">' + icon('grid') + '<span>تغيير النظام</span></a>' +
     '<a href="#" data-action="logout">' + icon('logout') + '<span>تسجيل الخروج</span></a>' : '';
-  const bn = NAV[portal].concat([{ h: '#systems', k: 'systems', label: 'الأنظمة', icon: 'grid' }, { h: '#', k: 'logout', label: 'خروج', icon: 'logout', action: 'logout' }]);
+  const bn = NAV[portal].concat([{ h: '#systems', k: 'systems', label: 'الأنظمة', icon: 'grid' }]);
+  const cur0 = NAV[portal].find(it => it.k === key);
+  $('#crumb').innerHTML = '<a href="#systems">نظام الرصد</a>' + icon('next') + '<span>نظام المحاضر</span>' + icon('next') + '<a href="' + NAV[portal][0].h + '">' + esc(PORTALS[portal].long) + '</a>' +
+    (cur0 && cur0 !== NAV[portal][0] ? icon('next') + '<span aria-current="page">' + esc(cur0.label) + '</span>' : '');
   $('#bottomnav').innerHTML = bn.map(it => '<a href="' + it.h + '"' + cur(it) + (it.accent ? ' class="accent"' : '') + (it.action ? ' data-action="' + it.action + '"' : '') + '><span class="bn-icon">' + icon(it.icon) + '</span><span>' + it.label + '</span></a>').join('');
 }
 function openDrawer() {
@@ -358,9 +361,9 @@ let toastTimer = null;
 function toast(text, kind) {
   const dlg = document.querySelector('dialog.preview[open]');
   const r = dlg ? $('.dlg-toast', dlg) : $('#toastRegion');
-  r.innerHTML = '<div class="toast ' + (kind || 'ok') + '">' + icon(kind === 'bad' ? 'alert' : kind === 'info' ? 'info' : 'check') + '<span>' + esc(text) + '</span></div>';
+  r.innerHTML = '<div class="toast ' + (kind || 'ok') + '" data-at="' + Date.now() + '">' + icon(kind === 'bad' ? 'alert' : kind === 'info' ? 'info' : 'check') + '<span>' + esc(text) + '</span></div>';
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { r.innerHTML = ''; }, 5200);
+  toastTimer = setTimeout(() => { r.innerHTML = ''; }, 3600);
 }
 function openViewer(src, title, caption) {
   const d = $('#viewer');
@@ -448,10 +451,14 @@ async function signOut() {
 function renderLogin(view) {
   view.innerHTML =
     '<div class="login">' +
+      '<section class="id-band login-band">' +
+        '<div class="id-org"><span class="brand-mark" aria-hidden="true">MECC</span><span><strong>وزارة البيئة والتغير المناخي</strong><small>دولة قطر · إدارة الحماية البرية</small></span></div>' +
+        '<h1>نظام الرصد</h1>' +
+        '<p>رصد المخالفات البيئية والمخلفات البرية ميدانياً، ومتابعة المحاضر حتى اعتمادها.</p>' +
+      '</section>' +
       '<div class="login-card">' +
-        '<div class="login-brand"><span class="brand-mark" aria-hidden="true">MECC</span><div><strong>وزارة البيئة والتغير المناخي</strong><span>دولة قطر · إدارة الحماية البرية</span></div></div>' +
-        '<h1>تسجيل الدخول</h1>' +
-        '<p class="lead">نظام الرصد</p>' +
+        '<h2>تسجيل الدخول</h2>' +
+        '<p class="lead">أدخل بيانات حسابك للمتابعة.</p>' +
         '<form id="loginForm" novalidate>' +
           '<div class="field"><label for="lg-user">اسم المستخدم أو الرقم الوظيفي</label><input id="lg-user" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" class="num-input" required></div>' +
           '<div class="field"><label for="lg-pass">كلمة المرور</label><div class="pass-wrap"><input id="lg-pass" type="password" autocomplete="current-password" class="num-input" required>' +
@@ -501,7 +508,8 @@ function submitLogin() {
 const WASTE_SYSTEM_URL = '';
 function renderSystems(view, user) {
   view.innerHTML =
-    '<div class="page-head"><div><p class="eyebrow">نظام الرصد</p><h1>' + greeting() + '، ' + esc(user.name) + '</h1><p class="lead">اختر نوع الرصد للمتابعة.</p></div></div>' +
+    '<section class="id-band hub-band"><p class="id-eyebrow">نظام الرصد</p><h1>' + greeting() + '، ' + esc(user.name) + '</h1>' +
+      '<p>اختر نوع الرصد للمتابعة.</p><span class="id-chip">' + icon(PORTALS[user.role].icon) + esc(user.title) + '</span></section>' +
     '<div class="sys-grid">' +
       '<a class="sys-card" href="#waste"><span class="sys-ic">' + icon('trash', 'ic-lg') + '</span>' +
         '<h2>رصد المخلفات</h2><p>رصد المخلفات البرية.</p><span class="go">فتح' + icon('next') + '</span></a>' +
@@ -597,7 +605,13 @@ function parseRoute() {
   if (m) return m[1].split('-').concat([m[2]]);
   return h ? h.split('-') : [];
 }
+let lastRouteHash = null;
 function render() {
+  if (lastRouteHash !== null && lastRouteHash !== location.hash) {
+    // leave a just-shown toast visible for the page it refers to, but drop older ones
+    setTimeout(() => { const t = $('#toastRegion .toast'); if (t && Date.now() - (Number(t.dataset.at) || 0) > 1500) $('#toastRegion').innerHTML = ''; }, 0);
+  }
+  lastRouteHash = location.hash;
   leaveWizard();
   closeDrawer();
   if (pv.c) closePreview();
@@ -824,11 +838,11 @@ function renderHome(view) {
   const returned = list.filter(c => c.status === 'returned');
   const recent = list.filter(c => c.status !== 'returned').slice(0, 4);
   view.innerHTML =
-    '<section class="card hero">' +
-      '<p class="eyebrow">بوابة المفتش · الضبط القضائي</p>' +
+    '<section class="id-band hero">' +
+      '<p class="id-eyebrow">بوابة المفتش · نظام المحاضر</p>' +
       '<h1>' + greeting() + (name ? '، ' + esc(name) : '') + '</h1>' +
       '<p class="lead">سجّل المخالفات البيئية ميدانياً، وتُحفظ على جهازك تلقائياً حتى تسليمها للمراجعة.</p>' +
-      '<a class="btn primary xl" href="#new">' + icon('plus', 'ic-lg') + 'محضر جديد</a>' +
+      '<a class="btn on-dark xl" href="#new">' + icon('plus', 'ic-lg') + 'محضر جديد</a>' +
     '</section>' +
     '<div class="stats" role="list">' +
       '<a role="listitem" class="stat st-action" href="#reports-action"><span class="stat-label">تحتاج إجراء</span><strong>' + action.length + '</strong><span class="stat-sub">مسودات ومعادة</span></a>' +
@@ -989,7 +1003,6 @@ function wizardHTML(rec) {
   '<nav class="stepper" aria-label="خطوات المحضر">' +
     '<div class="stepper-compact"><span class="now" id="stepNow">الخطوة 1 من 3</span><span class="name" id="stepName">' + STEPS[0] + '</span></div>' +
     '<ol class="step-pills">' + STEPS.map((s, i) => '<li><button type="button" data-action="go-step" data-step="' + (i + 1) + '"><span class="n">' + (i + 1) + '</span><span class="lbl-long">' + s + '</span><span class="lbl-short">' + STEPS_SHORT[i] + '</span></button></li>').join('') + '</ol>' +
-    '<p class="hint step-hint">يمكنك التنقل بين الخطوات بحرية؛ يتم التحقق من اكتمال البيانات عند التسليم.</p>' +
   '</nav>' +
 
   /* ---------- STEP 1 ---------- */
