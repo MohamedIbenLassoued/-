@@ -99,7 +99,16 @@ const SIGNATURE = { unspecified: 'لم يحدد', signed: 'وقّع', refused: '
 const SETTLEMENT = { '': 'لم يحدد', offered: 'تم عرض الصلح', not_offered: 'لم يُعرض الصلح' };
 const OFFENDER_TYPE = { person: 'شخص', company: 'شركة' };
 const PHOTO_CAT = { field: 'صورة ميدانية', support: 'دليل داعم' };
-const LOC_SOURCE = { gps: 'GPS الجهاز', photo: 'من بيانات الصورة', map: 'تحديد على الخريطة', manual: 'إدخال يدوي' };
+const LOC_SOURCE = { gps: 'GPS الجهاز', photo: 'من بيانات الصورة', map: 'تحديد على الخريطة', manual: 'إدخال يدوي', mock: 'محاكاة GPS (تجريبي)' };
+/* Qatar municipalities with an approximate centre (used only to place demo/mock coordinates). */
+const MUNICIPALITIES = [
+  ['الدوحة', 25.2854, 51.5310], ['الريان', 25.2919, 51.4244], ['الوكرة', 25.1659, 51.6038], ['أم صلال', 25.4170, 51.4040],
+  ['الخور والذخيرة', 25.6839, 51.5058], ['الشمال', 26.1300, 51.2000], ['الضعاين', 25.5700, 51.4800], ['الشحانية', 25.3700, 51.2000]
+];
+/* Suggestions only; any area name can be typed. */
+const AREA_SUGGESTIONS = ['الغارية', 'الخريب', 'الجميلية', 'أم قرن', 'الكرعانة', 'سيلين', 'أبو سمرة', 'دخان', 'الزبارة', 'الرويس', 'الخويرية',
+  'فويرط', 'العريش', 'روضة راشد', 'الخرسعة', 'العريق', 'أم باب', 'الكعبان', 'سميسمة', 'الذخيرة', 'الغويرية', 'مسيعيد', 'الوكير', 'أبو نخلة', 'الشيحانية'];
+const MAX_LETTER_PAGES = 2;
 const STEPS = ['الموقع والزمان والصور', 'المخالفات', 'بيانات المخالف والمراجعة'];
 const STEPS_SHORT = ['الموقع والصور', 'المخالفات', 'المخالف'];
 
@@ -192,7 +201,8 @@ function fmtBytes(n) {
 const ltr = s => '<bdi class="ltr" dir="ltr">' + esc(s) + '</bdi>';
 function coordsText(c) { return Number(c.lat).toFixed(6) + ', ' + Number(c.lng).toFixed(6); }
 function locText(c) {
-  if (c.place && c.place.trim()) return esc(c.place.trim());
+  const named = [c.area, c.place].map(x => String(x || '').trim()).filter(Boolean);
+  if (named.length) return esc(named.join(' — '));
   if (hasCoords(c)) return ltr(Number(c.lat).toFixed(5) + ', ' + Number(c.lng).toFixed(5));
   return 'لم يحدد الموقع';
 }
@@ -232,11 +242,14 @@ function normalize(raw) {
   c.violationNos = Array.from(new Set(c.violationNos.map(Number).filter(n => VBY[n]))).sort((a, b) => a - b);
   c.legacyViolations = (Array.isArray(c.violations) ? c.violations : []).filter(v => typeof v === 'string' && !LEGACY_VIOLATIONS.includes(v) && !VIOLATIONS.some(x => x.text === v));
   c.chips = (Array.isArray(c.chips) ? c.chips : []).map(x => String(x)).filter(x => x.trim());
+  // كتاب إدارة الثروة الحيوانية (camel chip certificate) — attached for grazing violations
+  const lv = c.livestock && typeof c.livestock === 'object' ? c.livestock : null;
+  c.livestock = lv ? { reqNo: String(lv.reqNo || ''), date: String(lv.date || ''), pages: (Array.isArray(lv.pages) ? lv.pages : []).filter(x => x && x.preview) } : null;
   c.offenderType = c.offenderType === 'company' ? 'company' : 'person';
   c.signature = SIGNATURE[c.signature] ? c.signature : 'unspecified';
   ['offenderSig', 'inspectorSig'].forEach(k => { c[k] = typeof c[k] === 'string' && c[k].indexOf('data:image/') === 0 ? c[k] : ''; });
   c.settlement = Object.prototype.hasOwnProperty.call(SETTLEMENT, c.settlement || '') ? (c.settlement || '') : '';
-  ['date', 'time', 'place', 'notes', 'person', 'qid', 'phone', 'address', 'section', 'inspectorName', 'inspectorNo', 'managerNote'].forEach(k => { c[k] = c[k] == null ? '' : String(c[k]); });
+  ['date', 'time', 'place', 'municipality', 'area', 'notes', 'person', 'qid', 'phone', 'address', 'section', 'inspectorName', 'inspectorNo', 'managerNote'].forEach(k => { c[k] = c[k] == null ? '' : String(c[k]); });
   ['lat', 'lng', 'accuracy'].forEach(k => { c[k] = (c[k] === null || c[k] === undefined || c[k] === '') ? null : Number(c[k]); if (Number.isNaN(c[k])) c[k] = null; });
   if (!LOC_SOURCE[c.locSource]) c.locSource = hasCoords(c) ? 'map' : null;
   if (!Array.isArray(c.returnComments)) {
@@ -725,6 +738,8 @@ function detailSections(c, opts) {
     ['الساعة', esc(fmtTime12(c.time))],
     ['المفتش', esc(c.inspectorName || '—') + (c.inspectorNo ? ' · الرقم الوظيفي ' + ltr(c.inspectorNo) : '')],
     ['القسم', esc(c.section || '—')],
+    ['البلدية', esc(c.municipality || '—')],
+    ['المنطقة', esc(c.area || '—')],
     ['وصف الموقع', esc(c.place || '—')],
     ['الإحداثيات', hasCoords(c) ? ltr(coordsText(c)) + osm : 'غير محددة'],
     hasCoords(c) ? ['مصدر الموقع', esc(LOC_SOURCE[c.locSource] || '—') + (c.accuracy != null ? ' · الدقة ±' + ltr(Math.round(c.accuracy)) + ' م' : '')] : null
@@ -735,6 +750,10 @@ function detailSections(c, opts) {
   const viol = '<section class="card" aria-labelledby="sec-viol"><h2 id="sec-viol" class="review-sec-head">المخالفات المضبوطة</h2>' +
     (vlist ? '<ul class="vsum">' + vlist + '</ul>' : '<p class="muted">لم تحدد مخالفات.</p>') +
     (c.chips.length ? '<div style="margin-top:12px"><p class="label">أرقام شرائح الإبل</p><div class="chips-view">' + c.chips.map(x => '<span>' + esc(x) + '</span>').join('') + '</div></div>' : '') +
+    (c.livestock ? '<div style="margin-top:12px"><p class="label">كتاب إدارة الثروة الحيوانية</p>' +
+      '<p class="hint" style="margin:0 0 8px">' + (c.livestock.reqNo ? 'رقم طلب الإفادة: ' + ltr(c.livestock.reqNo) + ' · ' : '') + (c.livestock.date ? 'تاريخ الإفادة: ' + fmtDate(c.livestock.date) : '') + '</p>' +
+      (c.livestock.pages.length ? '<div class="gallery">' + c.livestock.pages.map((ph, i) => '<figure><button type="button" data-action="zoom" data-kind="lv" data-case="' + esc(c.id) + '" data-id="' + esc(ph.id) + '" aria-label="تكبير صفحة الكتاب ' + (i + 1) + '"><img src="' + esc(ph.thumb || ph.preview) + '" alt="" loading="lazy"></button><figcaption><b>صفحة ' + (i + 1) + '</b></figcaption></figure>').join('') + '</div>'
+        : '<p class="field-error">لم يُرفق الكتاب.</p>') + '</div>' : '') +
     '<div style="margin-top:12px"><p class="label">شرح المخالفة</p><p style="white-space:pre-wrap;overflow-wrap:anywhere">' + esc(c.notes || '—') + '</p></div>' +
     '<div class="legal-note" style="margin-top:12px">' + icon('info') + '<span>' + LEGAL_NOTE + '</span></div>' +
   '</section>';
@@ -874,7 +893,7 @@ const R_FILTERS = [
 function matchQuery(c, q) {
   if (!q) return true;
   q = latinDigits(q).toLowerCase();
-  return [c.id, c.place, c.person, c.qid, c.section, c.notes].some(v => String(v || '').toLowerCase().includes(q));
+  return [c.id, c.place, c.area, c.municipality, c.person, c.qid, c.section, c.notes].some(v => String(v || '').toLowerCase().includes(q));
 }
 function renderReports(view, f) {
   const filt = R_FILTERS.find(x => x[0] === f) || R_FILTERS[0];
@@ -927,7 +946,8 @@ function blankData() {
   const p = getProfile();
   return {
     date: todayISO(), time: nowTime(), inspectorName: p.name || '', inspectorNo: p.no || '',
-    place: '', lat: null, lng: null, accuracy: null, locSource: null, locAt: null,
+    place: '', municipality: '', area: '', lat: null, lng: null, accuracy: null, locSource: null, locAt: null,
+    livestock: { reqNo: '', date: '', pages: [] },
     violationNos: [], chips: [], notes: '', photos: [],
     offenderType: 'person', person: '', qid: '', phone: '', address: '', section: '', settlement: '', signature: 'unspecified',
     offenderSig: '', inspectorSig: ''
@@ -937,6 +957,7 @@ function dataFromCase(c) {
   const d = blankData();
   Object.keys(d).forEach(k => { if (c[k] !== undefined) d[k] = clone(c[k]); });
   if (!d.date) d.date = todayISO();
+  if (!d.livestock) d.livestock = { reqNo: '', date: '', pages: [] };
   return d;
 }
 function needsChips() { return W.d.violationNos.some(n => CHIP_REQUIRED.includes(n)); }
@@ -960,6 +981,7 @@ function renderWizard(view, id) {
   view.innerHTML = wizardHTML(rec);
   renderLocStatus();
   renderChips();
+  renderLetter();
   renderPhotos();
   updateViolationUI();
   setSaveState(rec ? 'saved' : 'idle', rec ? rec.updatedAt : null);
@@ -977,6 +999,20 @@ function wizardHTML(rec) {
       '<p class="hint" style="margin:0 0 10px">مطلوبة لمخالفات الرعي (البنود 1–4). أضف رقماً لكل شريحة.</p>' +
       '<div id="chipList" role="group" aria-labelledby="chipH"></div>' +
       '<button class="btn secondary block" type="button" data-action="add-chip">' + icon('plus') + 'إضافة رقم شريحة</button>' +
+      '<div class="lv-box" id="lvBox">' +
+        '<div class="card-head" style="margin-bottom:4px"><h3 id="lvH">' + icon('inbox') + ' كتاب إدارة الثروة الحيوانية <span class="req">*</span></h3><span class="counter" id="lvCount">0 / ' + MAX_LETTER_PAGES + '</span></div>' +
+        '<p class="hint" style="margin:0 0 10px">إفادة حول شريحة الإبل الإلكترونية. صوّر الكتاب أو أرفقه (صفحة أو صفحتان).</p>' +
+        '<div class="grid2">' +
+          '<div class="field"><label for="lv-req">رقم طلب الإفادة <span class="opt">(اختياري)</span></label><input id="lv-req" type="text" class="num-input" inputmode="numeric" data-lv="reqNo" value="' + esc(d.livestock.reqNo) + '" autocomplete="off"></div>' +
+          '<div class="field"><label for="lv-date">تاريخ الإفادة <span class="opt">(اختياري)</span></label><input id="lv-date" type="date" data-lv="date" value="' + esc(d.livestock.date) + '"></div>' +
+        '</div>' +
+        '<div class="photo-actions">' +
+          '<label class="btn secondary file-btn" id="lvCamBtn">' + icon('camera') + '<span>تصوير الكتاب</span><input type="file" id="lvCam" accept="image/*" capture="environment" data-lv-input aria-label="تصوير كتاب الثروة الحيوانية"></label>' +
+          '<label class="btn secondary file-btn" id="lvFileBtn">' + icon('image') + '<span>اختيار من الجهاز</span><input type="file" id="lvFile" accept="image/*" multiple data-lv-input aria-label="اختيار كتاب الثروة الحيوانية من الجهاز"></label>' +
+        '</div>' +
+        '<div id="lvMsg" aria-live="assertive"></div>' +
+        '<ul class="lv-list" id="lvList" aria-label="صفحات الكتاب المرفقة"></ul>' +
+      '</div>' +
     '</div>';
   const vgroups = Object.keys(CATS).map(cat => {
     const items = VIOLATIONS.filter(v => v.cat === cat);
@@ -1034,7 +1070,13 @@ function wizardHTML(rec) {
         '<button class="btn ghost" type="button" data-action="clear-loc">' + icon('close') + 'مسح الإحداثيات</button>' +
       '</div>' +
       '<div class="map-box" id="mapBox" hidden><div class="map" id="map" role="application" aria-label="خريطة لتحديد موقع المخالفة"></div><p class="map-hint" id="mapHint">اضغط على الخريطة لوضع علامة موقع المخالفة. موقع الخريطة الافتراضي لا يُعتبر موقعاً محدداً.</p></div>' +
-      '<div class="field" style="margin-top:14px"><label for="f-place">وصف الموقع</label><textarea id="f-place" data-f="place" rows="2" placeholder="مثال: منطقة الخريب – شمال الطريق الرئيسي بنحو 2 كم">' + esc(d.place) + '</textarea><p class="hint">مطلوب إذا تعذر تحديد الإحداثيات.</p></div>' +
+      '<div class="grid2" style="margin-top:14px">' +
+        '<div class="field"><label for="f-muni">البلدية</label><select id="f-muni" data-f="municipality"><option value="">اختر البلدية</option>' +
+          MUNICIPALITIES.map(m => '<option' + (d.municipality === m[0] ? ' selected' : '') + '>' + m[0] + '</option>').join('') + '</select></div>' +
+        '<div class="field"><label for="f-area">المنطقة</label><input id="f-area" type="text" data-f="area" list="areaList" value="' + esc(d.area) + '" placeholder="اختر من القائمة أو اكتب اسم المنطقة" autocomplete="off">' +
+          '<datalist id="areaList">' + AREA_SUGGESTIONS.map(a => '<option value="' + a + '"></option>').join('') + '</datalist></div>' +
+      '</div>' +
+      '<div class="field"><label for="f-place">وصف الموقع</label><textarea id="f-place" data-f="place" rows="2" placeholder="مثال: منطقة الخريب – شمال الطريق الرئيسي بنحو 2 كم">' + esc(d.place) + '</textarea><p class="hint">مطلوب المنطقة أو الوصف إذا تعذر تحديد الإحداثيات.</p></div>' +
     '</div>' +
     '<div class="card" id="evCard">' +
       '<div class="card-head"><h3 id="evH">الأدلة والصور <span class="req">*</span></h3><span class="counter" id="photoCount">0 / ' + MAX_PHOTOS + '</span></div>' +
@@ -1156,11 +1198,12 @@ function serialize(d) {
   const okCoords = validLat(lat) && validLng(lng);
   return {
     date: d.date, time: d.time, inspectorName: d.inspectorName.trim(), inspectorNo: latinDigits(d.inspectorNo).trim(),
-    place: d.place, lat: okCoords ? lat : null, lng: okCoords ? lng : null,
+    place: d.place, municipality: d.municipality, area: d.area.trim(), lat: okCoords ? lat : null, lng: okCoords ? lng : null,
     accuracy: okCoords ? d.accuracy : null, locSource: okCoords ? (d.locSource || 'manual') : null, locAt: okCoords ? d.locAt : null,
     section: d.section, violationNos: d.violationNos.slice().sort((a, b) => a - b),
     violations: d.violationNos.slice().sort((a, b) => a - b).map(n => VBY[n].text),
     chips: needsChips() ? d.chips.map(x => latinDigits(x).trim()).filter(Boolean) : [],
+    livestock: needsChips() ? { reqNo: latinDigits(d.livestock.reqNo).trim(), date: d.livestock.date, pages: d.livestock.pages } : null,
     notes: d.notes, photos: d.photos,
     offenderType: 'person', person: d.person.trim(), qid: latinDigits(d.qid).trim(), phone: latinDigits(d.phone).trim(),
     address: d.address, settlement: d.settlement, signature: d.signature,
@@ -1168,7 +1211,7 @@ function serialize(d) {
   };
 }
 function isEmptyDraft(d) {
-  return !(d.place.trim() || W.raw.lat.trim() || W.raw.lng.trim() || d.violationNos.length || d.notes.trim() || d.photos.length ||
+  return !(d.place.trim() || d.area.trim() || d.municipality || W.raw.lat.trim() || W.raw.lng.trim() || d.violationNos.length || d.notes.trim() || d.photos.length ||
     d.person.trim() || d.qid.trim() || d.phone.trim() || d.address.trim() || d.section.trim());
 }
 function saveNow() {
@@ -1245,11 +1288,14 @@ function onWizardField(t) {
       $('#refusedNote').hidden = t.value !== 'refused';
       if (t.value === 'signed') mountPads();
     }
-    if (f === 'place') renderLocStatus();
+    if (f === 'place' || f === 'area') renderLocStatus();
     scheduleSave();
     refreshValidation();
   } else if (t.matches('[data-v]')) {
     toggleViolation(Number(t.dataset.v), t.checked);
+  } else if (t.matches('[data-lv]')) {
+    W.d.livestock[t.dataset.lv] = t.value;
+    scheduleSave();
   } else if (t.matches('[data-chip]')) {
     W.d.chips[Number(t.dataset.chip)] = t.value;
     t.removeAttribute('aria-invalid');
@@ -1417,7 +1463,7 @@ function renderLocStatus() {
   const b = $('#locBadge');
   if (c.ok) {
     b.innerHTML = '<span class="badge b-ok">تم تحديد الموقع · ' + esc(LOC_SOURCE[W.d.locSource] || 'إدخال يدوي') + '</span>';
-  } else if (W.d.place.trim()) {
+  } else if (W.d.place.trim() || W.d.area.trim()) {
     b.innerHTML = '<span class="badge b-neutral">وصف نصي فقط</span>';
   } else {
     b.innerHTML = '<span class="badge b-warn">لم يتم تحديد الموقع</span>';
@@ -1444,8 +1490,28 @@ function setLocation(lat, lng, acc, src) {
   scheduleSave();
   refreshValidation();
 }
+/* Demo location: used where the device location cannot be reached (e.g. inside claude.ai). */
+function mockLocate(reason) {
+  const btn = $('#locBtn');
+  const wizard = W;
+  btn.disabled = true;
+  btn.setAttribute('aria-busy', 'true');
+  btn.querySelector('span').textContent = 'جارٍ تحديد الموقع…';
+  locMsg('info', 'جارٍ تحديد الموقع (محاكاة)…');
+  setTimeout(() => {
+    if (W !== wizard) return;
+    btn.disabled = false; btn.removeAttribute('aria-busy'); btn.querySelector('span').textContent = 'تحديث موقعي';
+    const m = MUNICIPALITIES.find(x => x[0] === W.d.municipality);
+    const base = m ? [m[1], m[2]] : [25.4495, 51.2234];
+    const j = () => (Math.random() - 0.5) * (m ? 0.03 : 0.01);
+    setLocation(base[0] + j(), base[1] + j(), 6 + Math.round(Math.random() * 10), 'mock');
+    locMsg('warn', '<strong>موقع تجريبي (محاكاة GPS)</strong>' + esc(reason) + ' وُلِّدت إحداثيات تجريبية' + (m ? ' داخل بلدية ' + esc(m[0]) : '') +
+      ' لأغراض العرض فقط، وتظهر في المحضر بوصف «محاكاة GPS». للموقع الحقيقي: التقط صورة تحفظ الموقع، أو الصق الإحداثيات من الخرائط.');
+  }, 1100);
+}
 function useMyLocation() {
   const btn = $('#locBtn');
+  if (EMBEDDED) { mockLocate('المنصة تمنع الوصول إلى موقع الجهاز داخل claude.ai؛'); return; }
   if (!('geolocation' in navigator)) {
     locMsg('bad', '<strong>تحديد الموقع غير متاح</strong>هذا الجهاز أو المتصفح لا يدعم خدمة تحديد الموقع. أدخل الإحداثيات يدوياً، أو حدد النقطة على الخريطة، أو اكتب وصفاً للموقع.');
     return;
@@ -1487,7 +1553,8 @@ function useMyLocation() {
       2: '<strong>تعذر تحديد الموقع حالياً</strong>إشارة GPS غير متوفرة. تأكد من تفعيل خدمة الموقع في الجهاز، أو انتقل إلى مكان مكشوف، أو أدخل الإحداثيات يدوياً.',
       3: '<strong>انتهت مهلة تحديد الموقع</strong>لم تصل إشارة GPS في الوقت المحدد. أعد المحاولة، أو أدخل الإحداثيات يدوياً، أو حدد النقطة على الخريطة.'
     };
-    locMsg('bad', M[err.code] || '<strong>تعذر تحديد الموقع</strong>حدث خطأ غير متوقع. أدخل الإحداثيات يدوياً أو اكتب وصف الموقع.');
+    locMsg('bad', (M[err.code] || '<strong>تعذر تحديد الموقع</strong>حدث خطأ غير متوقع. أدخل الإحداثيات يدوياً أو اكتب وصف الموقع.') +
+      '<div style="margin-top:8px"><button class="btn secondary sm" type="button" data-action="mock-loc">استخدام موقع تجريبي (محاكاة)</button></div>');
   }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
 }
 function clearLocation() {
@@ -1647,7 +1714,7 @@ function locationBlockedHelp() {
     '<li><b>من الخرائط:</b> افتح <a href="https://www.google.com/maps" target="_blank" rel="noopener">خرائط Google</a>، اضغط مطولاً على موقعك وانسخ الإحداثيات، ثم الصقها في حقل خط العرض (يُملأ الحقلان معاً).</li>' +
     '<li>أو اكتب وصف الموقع. يعمل GPS مباشرة عند فتح التطبيق من ملفه أو من رابط https.</li></ul>';
 }
-async function processImage(f) {
+async function processImage(f, maxPx) {
   if (f.size === 0) throw new Error('الملف فارغ أو تالف.');
   if (f.size > MAX_BYTES) throw new Error('حجم الملف ' + fmtBytes(f.size) + ' يتجاوز الحد المسموح (10 م.ب). خفّض دقة الكاميرا (مثل 12 ميغابكسل) ثم أعد الالتقاط.');
   const declared = (f.type === 'application/octet-stream') ? '' : (MIME_ALIASES[f.type] || f.type);
@@ -1660,7 +1727,7 @@ async function processImage(f) {
   try { img = await decodeImage(f); } catch (e) { throw new Error('تعذر قراءة الصورة؛ قد يكون الملف تالفاً.'); }
   if (img.naturalWidth > MAX_DIMENSION || img.naturalHeight > MAX_DIMENSION) throw new Error('أبعاد الصورة كبيرة جداً.');
   let preview, thumb;
-  try { preview = toJpeg(img, PREVIEW_MAX, 0.72); thumb = toJpeg(img, THUMB_MAX, 0.7); }
+  try { preview = toJpeg(img, maxPx || PREVIEW_MAX, maxPx ? 0.8 : 0.72); thumb = toJpeg(img, THUMB_MAX, 0.7); }
   catch (e) { throw new Error('تعذر تجهيز معاينة الصورة.'); }
   return {
     id: uid('ph_'), preview, thumb, caption: '', category: 'field',
@@ -1707,6 +1774,34 @@ async function addPhotos(fileList) {
     }
   }
 }
+/* Letter pages (كتاب إدارة الثروة الحيوانية): kept larger so the text stays readable. */
+async function addLetterPages(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length || !W) return;
+  const wizard = W, errors = [];
+  let added = 0;
+  for (const f of files) {
+    if (W !== wizard) return;
+    if (W.d.livestock.pages.length >= MAX_LETTER_PAGES) { errors.push('الحد الأقصى ' + MAX_LETTER_PAGES + ' صفحات للكتاب.'); break; }
+    try { const p = await processImage(f, 1600); delete p.gps; W.d.livestock.pages.push(p); added++; }
+    catch (e) { errors.push('«' + (f.name || 'صورة') + '»: ' + e.message); }
+  }
+  if (W !== wizard) return;
+  renderLetter();
+  $('#lvMsg').innerHTML = errors.length ? '<div class="msg bad" style="margin-top:10px">' + icon('alert') + '<div><ul>' + errors.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul></div></div>' : '';
+  if (added) { refreshValidation(); if (!saveNow()) toast('تعذر حفظ صورة الكتاب محلياً: مساحة التخزين ممتلئة.', 'bad'); }
+}
+function renderLetter() {
+  const ul = $('#lvList');
+  if (!ul || !W) return;
+  const pages = W.d.livestock.pages;
+  ul.innerHTML = pages.map((p, i) => '<li class="lv-item"><button class="pthumb" type="button" data-action="zoom-lv" data-id="' + esc(p.id) + '" aria-label="عرض صفحة الكتاب ' + (i + 1) + '"><img src="' + esc(p.thumb || p.preview) + '" alt=""></button>' +
+    '<span class="meta"><b>صفحة ' + (i + 1) + '</b>' + (p.origSize ? fmtBytes(p.origSize) : '') + '</span>' +
+    '<button class="icon-btn danger" type="button" data-action="del-lv" data-id="' + esc(p.id) + '" aria-label="حذف صفحة الكتاب ' + (i + 1) + '">' + icon('trash') + '</button></li>').join('');
+  $('#lvCount').textContent = pages.length + ' / ' + MAX_LETTER_PAGES;
+  const full = pages.length >= MAX_LETTER_PAGES;
+  ['lvCam', 'lvFile'].forEach(id => { const i = document.getElementById(id); if (i) { i.disabled = full; i.parentNode.classList.toggle('is-disabled', full); } });
+}
 function setPhotoInputsDisabled(off) {
   ['camInput', 'fileInput'].forEach(id => { const i = document.getElementById(id); if (i) { i.disabled = off; i.parentNode.classList.toggle('is-disabled', off); } });
 }
@@ -1748,13 +1843,14 @@ function validateStep(s) {
     if ((lat === null) !== (lng === null)) e.push({ f: lat === null ? 'f-lat' : 'f-lng', m: 'أدخل خط العرض وخط الطول معاً، أو امسح الإحداثيات.' });
     else if (lat !== null && !validLat(lat)) e.push({ f: 'f-lat', m: 'قيمة خط العرض غير صحيحة (يجب أن تكون بين ‎-90 و 90).' });
     else if (lng !== null && !validLng(lng)) e.push({ f: 'f-lng', m: 'قيمة خط الطول غير صحيحة (يجب أن تكون بين ‎-180 و 180).' });
-    else if (lat === null && !d.place.trim()) e.push({ f: 'locBtn', m: 'لم يتم تحديد موقع المخالفة. استخدم «استخدام موقعي»، أو أدخل الإحداثيات، أو اكتب وصفاً للموقع.' });
+    else if (lat === null && !d.place.trim() && !d.area.trim()) e.push({ f: 'locBtn', m: 'لم يتم تحديد موقع المخالفة. استخدم «استخدام موقعي»، أو أدخل الإحداثيات، أو اختر المنطقة.' });
     if (W.busy) e.push({ f: 'camInput', m: 'انتظر حتى ينتهي تجهيز الصور.' });
     else if (!d.photos.length) e.push({ f: 'camInput', m: 'أرفق صورة واحدة على الأقل للمخالفة (التقاط صورة أو اختيار من الجهاز).' });
   }
   if (s === 2) {
     if (!d.violationNos.length) e.push({ f: 'vList', m: 'اختر مخالفة واحدة على الأقل.' });
     if (needsChips() && !d.chips.some(x => String(x).trim())) e.push({ f: 'chip0', m: 'أدخل رقم شريحة إبل واحداً على الأقل لمخالفات الرعي (البنود 1–4).' });
+    if (needsChips() && !d.livestock.pages.length) e.push({ f: 'lvCam', m: 'أرفق كتاب إدارة الثروة الحيوانية (إفادة شريحة الإبل) لمخالفات الرعي.' });
     d.chips.forEach((x, i) => { if (String(x).trim() && !/^[0-9A-Za-z\- ]{3,30}$/.test(latinDigits(x).trim())) e.push({ f: 'chip' + i, m: 'رقم الشريحة ' + (i + 1) + ' يحتوي على رموز غير صالحة.' }); });
   }
   if (s === 3) {
@@ -1808,13 +1904,15 @@ function renderReview() {
     sec('الموقع والزمان والصور', 1, kvRows([
       ['التاريخ', fmtDate(d.date) + ' · ' + esc(fmtTime12(d.time))],
       ['المفتش', esc(d.inspectorName || '—')],
+      ['المنطقة', esc([d.municipality, d.area].filter(Boolean).join(' — ') || '—')],
       ['الموقع', esc(d.place || '—')],
       ['الإحداثيات', c.ok ? ltr(c.lat.toFixed(6) + ', ' + c.lng.toFixed(6)) + (d.accuracy != null ? ' · ±' + d.accuracy + ' م' : '') : 'غير محددة'],
       ['الصور', d.photos.length ? d.photos.length + ' من ' + MAX_PHOTOS + ' (' + d.photos.filter(p => p.category === 'field').length + ' ميدانية، ' + d.photos.filter(p => p.category === 'support').length + ' دليل داعم)' : '<span class="field-error">لا توجد صور</span>']
     ])) +
     sec('المخالفات', 2,
       (d.violationNos.length ? '<ul class="vsum">' + d.violationNos.map(n => '<li><span class="vnum">' + n + '</span><span>' + esc(VBY[n].text) + '</span></li>').join('') + '</ul>' : '<p class="field-error">لم يتم اختيار مخالفات.</p>') +
-      (needsChips() ? '<p style="margin-top:8px"><b>أرقام الشرائح:</b> ' + (d.chips.filter(x => String(x).trim()).map(x => ltr(latinDigits(x).trim())).join('، ') || '<span class="field-error">غير مدخلة</span>') + '</p>' : '')) +
+      (needsChips() ? '<p style="margin-top:8px"><b>أرقام الشرائح:</b> ' + (d.chips.filter(x => String(x).trim()).map(x => ltr(latinDigits(x).trim())).join('، ') || '<span class="field-error">غير مدخلة</span>') + '</p>' +
+        '<p style="margin-top:4px"><b>كتاب الثروة الحيوانية:</b> ' + (d.livestock.pages.length ? d.livestock.pages.length + (d.livestock.pages.length === 1 ? ' صفحة' : ' صفحات') : '<span class="field-error">غير مرفق</span>') + '</p>' : '')) +
     sec('التوقيعات', 3, kvRows([
       ['توقيع المخالف', d.signature === 'signed' ? (d.offenderSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>') : esc(SIGNATURE[d.signature])],
       ['توقيع المفتش', d.inspectorSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>']
@@ -2079,6 +2177,7 @@ function paperHTML(c) {
       row('التاريخ / الساعة', fmtDate(c.date) + ' — ' + esc(fmtTime12(c.time))) +
       row('المفتش', esc(c.inspectorName || '—') + (c.inspectorNo ? ' — الرقم الوظيفي: ' + ltr(c.inspectorNo) : '')) +
       row('القسم', esc(c.section || '—')) +
+      row('البلدية / المنطقة', esc([c.municipality, c.area].filter(Boolean).join(' — ') || '—')) +
       row('وصف الموقع', esc(c.place || '—')) +
       row('الإحداثيات', hasCoords(c) ? ltr('N ' + Number(c.lat).toFixed(6) + '  E ' + Number(c.lng).toFixed(6)) + (c.accuracy != null ? ' (±' + Math.round(c.accuracy) + ' م)' : '') : 'غير محددة') +
     '</table>' +
@@ -2189,6 +2288,9 @@ table.w-tbl{width:100%;border-collapse:collapse;font-size:9.5px;line-height:1.33
 .w-ph .img{height:462px;background:#f3f3f3;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid #ccc}
 .w-ph img{width:100%;height:100%;object-fit:contain;display:block}
 .w-ph figcaption{font-size:11px;padding-top:4px}
+.w-lv-meta{font-size:11px;margin:0 0 8px;color:#333}
+.w-lv{height:960px;border:1px solid #ccc;background:#f6f6f6;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.w-lv img{width:100%;height:100%;object-fit:contain;display:block}
 `;
 function wpdBoxes(str, n, groups) {
   const chars = latinDigits(str || '').replace(/\s/g, '').split('').slice(0, n);
@@ -2244,7 +2346,7 @@ function wpdPage1(c) {
       '<div class="w-line"><span class="lbl">حرر هذا المحضر بمعرفة المفتش السيد/</span><span class="fill">' + esc(c.inspectorName) + '</span><span class="lbl">وظيفة رقم:</span><span class="fill sh"><span class="ltr">' + esc(c.inspectorNo) + '</span></span></div>' +
       '<div class="w-line"><span class="lbl">حيث وجد أن الشركة/ السيد:</span><span class="fill">' + esc(c.person) + '</span><span class="lbl">جوال رقم :</span><span class="fill sh"><span class="ltr">' + esc(c.phone) + '</span></span></div>' +
       '<div class="w-line"><span class="lbl">بطاقة شخصية رقم:</span>' + wpdBoxes(c.qid, 11) + '</div>' +
-      '<div class="w-line"><span class="lbl">منطقة</span><span class="fill">' + esc(c.place) + '</span><span class="lbl">الإحداثيات:</span>' +
+      '<div class="w-line"><span class="lbl">منطقة</span><span class="fill">' + esc(c.area || c.municipality || c.place) + '</span><span class="lbl">الإحداثيات:</span>' +
         '<span class="fill sh" style="flex-basis:120px"><span class="ltr">E ' + (hasCoords(c) ? Number(c.lng).toFixed(6) : '') + '</span></span>' +
         '<span class="fill sh" style="flex-basis:120px"><span class="ltr">N ' + (hasCoords(c) ? Number(c.lat).toFixed(6) : '') + '</span></span></div>' +
     '</div>' +
@@ -2260,22 +2362,33 @@ function wpdPage1(c) {
     '<div class="w-bar">المفتش</div>' +
     '<div class="w-insp"><span class="lbl">الاسم</span><span class="fill">' + esc(c.inspectorName) + '</span><span class="lbl">التوقيع</span><span class="fill">' + (c.inspectorSig ? '<img class="w-sig" src="' + esc(c.inspectorSig) + '" alt="">' : '') + '</span></div>' +
     '<div class="w-foot">توزيع النسخ : &#160; أبيض : الإدارة &#160;-&#160; أزرق : المخالف &#160;-&#160; أحمر : الدفتر</div>' +
-    '<div class="w-meta"><span>رقم المحضر: <span class="ltr">' + esc(c.id) + '</span>' + (c.status === 'approved' ? ' · اعتمده المدير: ' + esc(fmtDateTime(wpdApprovedAt(c))) : ' · الحالة: ' + esc(STATUS[c.status] ? STATUS[c.status].label : '')) + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
+    '<div class="w-meta"><span>رقم المحضر: <span class="ltr">' + esc(c.id) + '</span>' + (c.status === 'approved' ? ' · اعتمده المدير: ' + esc(fmtDateTime(wpdApprovedAt(c))) : ' · الحالة: ' + esc(STATUS[c.status] ? STATUS[c.status].label : '')) + (c.locSource === 'mock' ? ' · الإحداثيات محاكاة (تجريبي)' : '') + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
   '</div>';
 }
-function wpdPhotoPages(c) {
+function wpdLetterPages(c) {
+  if (!c.livestock || !c.livestock.pages.length) return [];
+  const n = c.livestock.pages.length;
+  return c.livestock.pages.map((p, i) => '<div class="wpd-page">' + wpdWatermark(c) +
+    '<div class="w-ph-head"><b>كتاب إدارة الثروة الحيوانية — إفادة حول شريحة الإبل الإلكترونية</b><span>محضر رقم <span class="ltr">' + esc(c.id) + '</span></span></div>' +
+    '<p class="w-lv-meta">' + (c.livestock.reqNo ? 'رقم طلب الإفادة: <span class="ltr">' + esc(c.livestock.reqNo) + '</span> · ' : '') + (c.livestock.date ? 'تاريخ الإفادة: ' + esc(fmtDate(c.livestock.date)) + ' · ' : '') +
+      'أرقام الشرائح: <span class="ltr">' + esc(c.chips.join('، ') || '—') + '</span>' + (n > 1 ? ' · صفحة ' + (i + 1) + ' من ' + n : '') + '</p>' +
+    '<div class="w-lv"><img src="' + esc(p.preview) + '" alt=""></div>' +
+    '<div class="w-meta"><span>مرفق بالمحضر</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
+  '</div>');
+}
+function wpdPhotoPages(c, first) {
   const pages = [];
   for (let i = 0; i < c.photos.length; i += 2) {
     const pair = c.photos.slice(i, i + 2);
     pages.push('<div class="wpd-page">' + wpdWatermark(c) +
       '<div class="w-ph-head"><b>الأدلة المصورة</b><span>محضر رقم <span class="ltr">' + esc(c.id) + '</span> · <span class="ltr">WPD/01</span></span></div>' +
       '<div class="w-ph">' + pair.map((p, j) => '<figure><div class="img"><img src="' + esc(p.preview) + '" alt=""></div><figcaption><b>' + (i + j + 1) + '. ' + esc(PHOTO_CAT[p.category]) + '</b>' + (p.caption ? ' — ' + esc(p.caption) : '') + '</figcaption></figure>').join('') + '</div>' +
-      '<div class="w-meta"><span>صفحة ' + (pages.length + 2) + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
+      '<div class="w-meta"><span>صفحة ' + (pages.length + (first || 2)) + '</span><span>مُولَّد من النموذج التجريبي — بيانات محلية</span></div>' +
     '</div>');
   }
   return pages;
 }
-function wpdPages(c) { return [wpdPage1(c)].concat(wpdPhotoPages(c)); }
+function wpdPages(c) { const lv = wpdLetterPages(c); return [wpdPage1(c)].concat(lv, wpdPhotoPages(c, 2 + lv.length)); }
 
 /* Render one page of HTML to a JPEG via SVG <foreignObject> (keeps correct Arabic shaping). */
 const BLANK_PX = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
@@ -2454,10 +2567,14 @@ document.addEventListener('click', e => {
     case 'official-print': printOfficial(t.dataset.id); break;
     case 'zoom': {
       let ph, list;
-      if (t.dataset.case) { const c = getCase(t.dataset.case); list = c ? c.photos : []; }
+      if (t.dataset.case) { const c = getCase(t.dataset.case); list = c ? (t.dataset.kind === 'lv' ? (c.livestock ? c.livestock.pages : []) : c.photos) : []; }
       else list = W ? W.d.photos : [];
       ph = list.find(p => p.id === t.dataset.id);
-      if (ph) { const i = list.indexOf(ph) + 1; openViewer(ph.preview, 'صورة ' + i + ' · ' + PHOTO_CAT[ph.category], ph.caption); }
+      if (ph) {
+        const i = list.indexOf(ph) + 1;
+        if (t.dataset.kind === 'lv') openViewer(ph.preview, 'كتاب الثروة الحيوانية — صفحة ' + i, '');
+        else openViewer(ph.preview, 'صورة ' + i + ' · ' + PHOTO_CAT[ph.category], ph.caption);
+      }
       break;
     }
     case 'delete-draft': {
@@ -2497,6 +2614,17 @@ document.addEventListener('click', e => {
     case 'locate': useMyLocation(); break;
     case 'clear-loc': clearLocation(); break;
     case 'clear-sig': clearSig(t.dataset.key); break;
+    case 'del-lv': {
+      const i = W.d.livestock.pages.findIndex(x => x.id === t.dataset.id);
+      if (i >= 0) { W.d.livestock.pages.splice(i, 1); renderLetter(); saveNow(); refreshValidation(); $('#lvCam').focus(); }
+      break;
+    }
+    case 'zoom-lv': {
+      const pages = W.d.livestock.pages, ph = pages.find(x => x.id === t.dataset.id);
+      if (ph) openViewer(ph.preview, 'كتاب الثروة الحيوانية — صفحة ' + (pages.indexOf(ph) + 1), '');
+      break;
+    }
+    case 'mock-loc': mockLocate('تعذر الحصول على موقع الجهاز؛'); break;
     case 'photo-loc': {
       const ph = W.d.photos.find(x => x.id === t.dataset.id);
       if (ph && ph.gps) {
@@ -2566,6 +2694,7 @@ document.addEventListener('change', e => {
   const t = e.target;
   if (!W || !t.closest('#wizard')) return;
   if (t.matches('[data-photo-input]')) { addPhotos(t.files).finally(() => { t.value = ''; }); return; }
+  if (t.matches('[data-lv-input]')) { addLetterPages(t.files).finally(() => { t.value = ''; }); return; }
   if (t.type === 'radio' || t.type === 'checkbox' || t.tagName === 'SELECT') onWizardField(t);
 });
 document.addEventListener('keydown', e => {
