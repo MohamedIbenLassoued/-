@@ -750,7 +750,9 @@ function detailSections(c, opts) {
   const viol = '<section class="card" aria-labelledby="sec-viol"><h2 id="sec-viol" class="review-sec-head">المخالفات المضبوطة</h2>' +
     (vlist ? '<ul class="vsum">' + vlist + '</ul>' : '<p class="muted">لم تحدد مخالفات.</p>') +
     (c.chips.length ? '<div style="margin-top:12px"><p class="label">أرقام شرائح الإبل</p><div class="chips-view">' + c.chips.map(x => '<span>' + esc(x) + '</span>').join('') + '</div></div>' : '') +
-    (c.livestock ? '<div style="margin-top:12px"><p class="label">كتاب إدارة الثروة الحيوانية</p>' +
+    (isGrazing(c) && !(c.livestock && c.livestock.pages.length) ? '<div style="margin-top:12px"><p class="label">كتاب إدارة الثروة الحيوانية</p><p class="hint" style="margin:0">' +
+      (c.status === 'approved' ? 'لم يُرفق.' : 'يُرفق عند اعتماد المدير.') + '</p></div>' : '') +
+    (c.livestock && c.livestock.pages.length ? '<div style="margin-top:12px"><p class="label">كتاب إدارة الثروة الحيوانية</p>' +
       '<p class="hint" style="margin:0 0 8px">' + (c.livestock.reqNo ? 'رقم طلب الإفادة: ' + ltr(c.livestock.reqNo) + ' · ' : '') + (c.livestock.date ? 'تاريخ الإفادة: ' + fmtDate(c.livestock.date) : '') + '</p>' +
       (c.livestock.pages.length ? '<div class="gallery">' + c.livestock.pages.map((ph, i) => '<figure><button type="button" data-action="zoom" data-kind="lv" data-case="' + esc(c.id) + '" data-id="' + esc(ph.id) + '" aria-label="تكبير صفحة الكتاب ' + (i + 1) + '"><img src="' + esc(ph.thumb || ph.preview) + '" alt="" loading="lazy"></button><figcaption><b>صفحة ' + (i + 1) + '</b></figcaption></figure>').join('') + '</div>'
         : '<p class="field-error">لم يُرفق الكتاب.</p>') + '</div>' : '') +
@@ -981,7 +983,6 @@ function renderWizard(view, id) {
   view.innerHTML = wizardHTML(rec);
   renderLocStatus();
   renderChips();
-  renderLetter();
   renderPhotos();
   updateViolationUI();
   setSaveState(rec ? 'saved' : 'idle', rec ? rec.updatedAt : null);
@@ -999,20 +1000,6 @@ function wizardHTML(rec) {
       '<p class="hint" style="margin:0 0 10px">مطلوبة لمخالفات الرعي (البنود 1–4). أضف رقماً لكل شريحة.</p>' +
       '<div id="chipList" role="group" aria-labelledby="chipH"></div>' +
       '<button class="btn secondary block" type="button" data-action="add-chip">' + icon('plus') + 'إضافة رقم شريحة</button>' +
-      '<div class="lv-box" id="lvBox">' +
-        '<div class="card-head" style="margin-bottom:4px"><h3 id="lvH">' + icon('inbox') + ' كتاب إدارة الثروة الحيوانية <span class="req">*</span></h3><span class="counter" id="lvCount">0 / ' + MAX_LETTER_PAGES + '</span></div>' +
-        '<p class="hint" style="margin:0 0 10px">إفادة حول شريحة الإبل الإلكترونية. صوّر الكتاب أو أرفقه (صفحة أو صفحتان).</p>' +
-        '<div class="grid2">' +
-          '<div class="field"><label for="lv-req">رقم طلب الإفادة <span class="opt">(اختياري)</span></label><input id="lv-req" type="text" class="num-input" inputmode="numeric" data-lv="reqNo" value="' + esc(d.livestock.reqNo) + '" autocomplete="off"></div>' +
-          '<div class="field"><label for="lv-date">تاريخ الإفادة <span class="opt">(اختياري)</span></label><input id="lv-date" type="date" data-lv="date" value="' + esc(d.livestock.date) + '"></div>' +
-        '</div>' +
-        '<div class="photo-actions">' +
-          '<label class="btn secondary file-btn" id="lvCamBtn">' + icon('camera') + '<span>تصوير الكتاب</span><input type="file" id="lvCam" accept="image/*" capture="environment" data-lv-input aria-label="تصوير كتاب الثروة الحيوانية"></label>' +
-          '<label class="btn secondary file-btn" id="lvFileBtn">' + icon('image') + '<span>اختيار من الجهاز</span><input type="file" id="lvFile" accept="image/*" multiple data-lv-input aria-label="اختيار كتاب الثروة الحيوانية من الجهاز"></label>' +
-        '</div>' +
-        '<div id="lvMsg" aria-live="assertive"></div>' +
-        '<ul class="lv-list" id="lvList" aria-label="صفحات الكتاب المرفقة"></ul>' +
-      '</div>' +
     '</div>';
   const vgroups = Object.keys(CATS).map(cat => {
     const items = VIOLATIONS.filter(v => v.cat === cat);
@@ -1203,7 +1190,6 @@ function serialize(d) {
     section: d.section, violationNos: d.violationNos.slice().sort((a, b) => a - b),
     violations: d.violationNos.slice().sort((a, b) => a - b).map(n => VBY[n].text),
     chips: needsChips() ? d.chips.map(x => latinDigits(x).trim()).filter(Boolean) : [],
-    livestock: needsChips() ? { reqNo: latinDigits(d.livestock.reqNo).trim(), date: d.livestock.date, pages: d.livestock.pages } : null,
     notes: d.notes, photos: d.photos,
     offenderType: 'person', person: d.person.trim(), qid: latinDigits(d.qid).trim(), phone: latinDigits(d.phone).trim(),
     address: d.address, settlement: d.settlement, signature: d.signature,
@@ -1293,9 +1279,6 @@ function onWizardField(t) {
     refreshValidation();
   } else if (t.matches('[data-v]')) {
     toggleViolation(Number(t.dataset.v), t.checked);
-  } else if (t.matches('[data-lv]')) {
-    W.d.livestock[t.dataset.lv] = t.value;
-    scheduleSave();
   } else if (t.matches('[data-chip]')) {
     W.d.chips[Number(t.dataset.chip)] = t.value;
     t.removeAttribute('aria-invalid');
@@ -1783,32 +1766,58 @@ async function addPhotos(fileList) {
   }
 }
 /* Letter pages (كتاب إدارة الثروة الحيوانية): kept larger so the text stays readable. */
-async function addLetterPages(fileList) {
+/* كتاب إدارة الثروة الحيوانية: attached by the director when approving a grazing report. */
+function isGrazing(c) { return c.violationNos.some(n => CHIP_REQUIRED.includes(n)); }
+function updateCaseLetter(id, fn) {
+  const cur = getCase(id);
+  if (!cur || cur.status !== 'forwarded') { toast('لا يمكن تعديل الكتاب: تغيرت حالة المحضر.', 'bad'); return false; }
+  const c = clone(cur);
+  c.livestock = c.livestock || { reqNo: '', date: '', pages: [] };
+  fn(c.livestock);
+  c.updatedAt = new Date().toISOString();
+  try { upsertCase(c); return true; } catch (e) { toast(isQuota(e) ? 'تعذر الحفظ: مساحة التخزين المحلي ممتلئة.' : 'تعذر الحفظ محلياً.', 'bad'); return false; }
+}
+function letterBoxHTML(c) {
+  const lv = c.livestock || { reqNo: '', date: '', pages: [] };
+  const full = lv.pages.length >= MAX_LETTER_PAGES;
+  const id = esc(c.id);
+  return '<div class="lv-box" id="lvBox">' +
+    '<div class="card-head" style="margin-bottom:4px"><h3 id="lvH">' + icon('inbox') + ' كتاب إدارة الثروة الحيوانية <span class="req">*</span></h3><span class="counter">' + lv.pages.length + ' / ' + MAX_LETTER_PAGES + '</span></div>' +
+    '<p class="hint" style="margin:0 0 10px">مخالفة رعي: أرفق إفادة إدارة الثروة الحيوانية حول شريحة الإبل' + (c.chips.length ? ' (<bdi dir="ltr">' + esc(c.chips.join('، ')) + '</bdi>)' : '') + ' قبل الاعتماد.</p>' +
+    '<div class="grid2">' +
+      '<div class="field"><label for="lv-req">رقم طلب الإفادة <span class="opt">(اختياري)</span></label><input id="lv-req" type="text" class="num-input" inputmode="numeric" data-lvr="reqNo" data-id="' + id + '" value="' + esc(lv.reqNo) + '" autocomplete="off"></div>' +
+      '<div class="field"><label for="lv-date">تاريخ الإفادة <span class="opt">(اختياري)</span></label><input id="lv-date" type="date" data-lvr="date" data-id="' + id + '" value="' + esc(lv.date) + '"></div>' +
+    '</div>' +
+    '<div class="photo-actions">' +
+      '<label class="btn secondary file-btn' + (full ? ' is-disabled' : '') + '">' + icon('camera') + '<span>تصوير الكتاب</span><input type="file" id="lvCam" accept="image/*" capture="environment" data-lv-input data-id="' + id + '"' + (full ? ' disabled' : '') + ' aria-label="تصوير كتاب الثروة الحيوانية"></label>' +
+      '<label class="btn secondary file-btn' + (full ? ' is-disabled' : '') + '">' + icon('image') + '<span>اختيار من الجهاز</span><input type="file" id="lvFile" accept="image/*" multiple data-lv-input data-id="' + id + '"' + (full ? ' disabled' : '') + ' aria-label="اختيار كتاب الثروة الحيوانية من الجهاز"></label>' +
+    '</div>' +
+    '<div id="lvMsg" aria-live="assertive"></div>' +
+    '<ul class="lv-list" aria-label="صفحات الكتاب المرفقة">' + lv.pages.map((pg, i) =>
+      '<li class="lv-item"><button class="pthumb" type="button" data-action="zoom" data-kind="lv" data-case="' + id + '" data-id="' + esc(pg.id) + '" aria-label="عرض صفحة الكتاب ' + (i + 1) + '"><img src="' + esc(pg.thumb || pg.preview) + '" alt=""></button>' +
+      '<span class="meta"><b>صفحة ' + (i + 1) + '</b>' + (pg.origSize ? fmtBytes(pg.origSize) : '') + '</span>' +
+      '<button class="icon-btn danger" type="button" data-action="del-lv" data-case="' + id + '" data-id="' + esc(pg.id) + '" aria-label="حذف صفحة الكتاب ' + (i + 1) + '">' + icon('trash') + '</button></li>').join('') + '</ul>' +
+  '</div>';
+}
+function refreshLetterBox(id, msgHtml) {
+  const box = $('#lvBox'), c = getCase(id);
+  if (!box || !c) return;
+  box.outerHTML = letterBoxHTML(c);
+  if (msgHtml) $('#lvMsg').innerHTML = msgHtml;
+  const err = $('#decErr'); if (err) err.textContent = '';
+}
+async function addLetterPages(id, fileList) {
   const files = Array.from(fileList || []);
-  if (!files.length || !W) return;
-  const wizard = W, errors = [];
-  let added = 0;
+  if (!files.length) return;
+  const errors = [];
   for (const f of files) {
-    if (W !== wizard) return;
-    if (W.d.livestock.pages.length >= MAX_LETTER_PAGES) { errors.push('الحد الأقصى ' + MAX_LETTER_PAGES + ' صفحات للكتاب.'); break; }
-    try { const p = await processImage(f, 1600); delete p.gps; W.d.livestock.pages.push(p); added++; }
+    const c = getCase(id);
+    if (!c || c.status !== 'forwarded') break;
+    if ((c.livestock ? c.livestock.pages.length : 0) >= MAX_LETTER_PAGES) { errors.push('الحد الأقصى ' + MAX_LETTER_PAGES + ' صفحات للكتاب.'); break; }
+    try { const pg = await processImage(f, 1600); delete pg.gps; if (!updateCaseLetter(id, lv => lv.pages.push(pg))) break; }
     catch (e) { errors.push('«' + (f.name || 'صورة') + '»: ' + e.message); }
   }
-  if (W !== wizard) return;
-  renderLetter();
-  $('#lvMsg').innerHTML = errors.length ? '<div class="msg bad" style="margin-top:10px">' + icon('alert') + '<div><ul>' + errors.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul></div></div>' : '';
-  if (added) { refreshValidation(); if (!saveNow()) toast('تعذر حفظ صورة الكتاب محلياً: مساحة التخزين ممتلئة.', 'bad'); }
-}
-function renderLetter() {
-  const ul = $('#lvList');
-  if (!ul || !W) return;
-  const pages = W.d.livestock.pages;
-  ul.innerHTML = pages.map((p, i) => '<li class="lv-item"><button class="pthumb" type="button" data-action="zoom-lv" data-id="' + esc(p.id) + '" aria-label="عرض صفحة الكتاب ' + (i + 1) + '"><img src="' + esc(p.thumb || p.preview) + '" alt=""></button>' +
-    '<span class="meta"><b>صفحة ' + (i + 1) + '</b>' + (p.origSize ? fmtBytes(p.origSize) : '') + '</span>' +
-    '<button class="icon-btn danger" type="button" data-action="del-lv" data-id="' + esc(p.id) + '" aria-label="حذف صفحة الكتاب ' + (i + 1) + '">' + icon('trash') + '</button></li>').join('');
-  $('#lvCount').textContent = pages.length + ' / ' + MAX_LETTER_PAGES;
-  const full = pages.length >= MAX_LETTER_PAGES;
-  ['lvCam', 'lvFile'].forEach(id => { const i = document.getElementById(id); if (i) { i.disabled = full; i.parentNode.classList.toggle('is-disabled', full); } });
+  refreshLetterBox(id, errors.length ? '<div class="msg bad" style="margin-top:10px">' + icon('alert') + '<div><ul>' + errors.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul></div></div>' : '');
 }
 function setPhotoInputsDisabled(off) {
   ['camInput', 'fileInput'].forEach(id => { const i = document.getElementById(id); if (i) { i.disabled = off; i.parentNode.classList.toggle('is-disabled', off); } });
@@ -1858,7 +1867,6 @@ function validateStep(s) {
   if (s === 2) {
     if (!d.violationNos.length) e.push({ f: 'vList', m: 'اختر مخالفة واحدة على الأقل.' });
     if (needsChips() && !d.chips.some(x => String(x).trim())) e.push({ f: 'chip0', m: 'أدخل رقم شريحة إبل واحداً على الأقل لمخالفات الرعي (البنود 1–4).' });
-    if (needsChips() && !d.livestock.pages.length) e.push({ f: 'lvCam', m: 'أرفق كتاب إدارة الثروة الحيوانية (إفادة شريحة الإبل) لمخالفات الرعي.' });
     d.chips.forEach((x, i) => { if (String(x).trim() && !/^[0-9A-Za-z\- ]{3,30}$/.test(latinDigits(x).trim())) e.push({ f: 'chip' + i, m: 'رقم الشريحة ' + (i + 1) + ' يحتوي على رموز غير صالحة.' }); });
   }
   if (s === 3) {
@@ -1920,7 +1928,7 @@ function renderReview() {
     sec('المخالفات', 2,
       (d.violationNos.length ? '<ul class="vsum">' + d.violationNos.map(n => '<li><span class="vnum">' + n + '</span><span>' + esc(VBY[n].text) + '</span></li>').join('') + '</ul>' : '<p class="field-error">لم يتم اختيار مخالفات.</p>') +
       (needsChips() ? '<p style="margin-top:8px"><b>أرقام الشرائح:</b> ' + (d.chips.filter(x => String(x).trim()).map(x => ltr(latinDigits(x).trim())).join('، ') || '<span class="field-error">غير مدخلة</span>') + '</p>' +
-        '<p style="margin-top:4px"><b>كتاب الثروة الحيوانية:</b> ' + (d.livestock.pages.length ? d.livestock.pages.length + (d.livestock.pages.length === 1 ? ' صفحة' : ' صفحات') : '<span class="field-error">غير مرفق</span>') + '</p>' : '')) +
+        '<p class="hint" style="margin-top:4px">يُرفق كتاب إدارة الثروة الحيوانية عند اعتماد المدير.</p>' : '')) +
     sec('التوقيعات', 3, kvRows([
       ['توقيع المخالف', d.signature === 'signed' ? (d.offenderSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>') : esc(SIGNATURE[d.signature])],
       ['توقيع المفتش', d.inspectorSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>']
@@ -2106,6 +2114,7 @@ function renderRoleReview(view, id, role) {
     decision =
       noteMsg('info', 'ملاحظة الإدارة عند التحويل', lastAction(c, 'forwarded')) +
       '<p class="muted" style="margin-bottom:12px">راجعت الإدارة هذا المحضر وحوّلته إليك للاعتماد.</p>' +
+      (isGrazing(c) ? letterBoxHTML(c) : '') +
       decisionField('ملاحظة المدير', 'إلزامية عند الإعادة إلى الإدارة، واختيارية عند الاعتماد.') +
       '<div class="btn-row"><button class="btn success lg" type="button" data-action="approve" data-id="' + esc(c.id) + '">' + icon('check') + 'اعتماد المحضر</button>' +
       '<button class="btn danger-outline lg" type="button" data-action="director-return" data-id="' + esc(c.id) + '">' + icon('prev') + 'إعادة إلى الإدارة</button></div>';
@@ -2156,6 +2165,11 @@ async function decide(id, action) {
     noteEl.focus();
     return;
   }
+  if (action === 'approved' && isGrazing(cur) && !(cur.livestock && cur.livestock.pages.length)) {
+    $('#decErr').textContent = 'أرفق كتاب إدارة الثروة الحيوانية قبل اعتماد مخالفة الرعي.';
+    const box = $('#lvBox'); if (box) { box.scrollIntoView({ block: 'center' }); const i = $('#lvCam'); if (i) i.focus({ preventScroll: true }); }
+    return;
+  }
   const a = T.ask(id);
   if (!(await askConfirm(a[0], a[1], a[2], a[3]))) return;
   const latest = getCase(id);
@@ -2166,7 +2180,8 @@ async function decide(id, action) {
   c.updatedAt = now;
   if (action === 'approved') { c.reviewedAt = now; c.managerNote = note; }
   if (action === 'returned') { c.reviewedAt = now; c.managerNote = note; c.returnComments.push({ text: note, at: now, by: 'الإدارة' }); }
-  c.history.push({ action, at: now, by: T.by + ' — ' + actorName(T.by), note });
+  const extra = action === 'approved' && isGrazing(c) && c.livestock && c.livestock.pages.length ? 'أُرفق كتاب إدارة الثروة الحيوانية (' + c.livestock.pages.length + (c.livestock.pages.length === 1 ? ' صفحة' : ' صفحات') + ').' : '';
+  c.history.push({ action, at: now, by: T.by + ' — ' + actorName(T.by), note: [note, extra].filter(Boolean).join(' ') });
   try { upsertCase(c); } catch (e) { toast('تعذر حفظ القرار محلياً.', 'bad'); return; }
   toast(T.done);
   render();
@@ -2598,6 +2613,13 @@ document.addEventListener('click', e => {
     case 'load-samples': loadSamples(); break;
     case 'remove-samples': removeSamples(); break;
     case 'approve': decide(t.dataset.id, 'approved'); break;
+    case 'del-lv': {
+      const cid = t.dataset.case, pid = t.dataset.id;
+      askConfirm('حذف صفحة الكتاب؟', '', 'حذف', true).then(yes => {
+        if (yes && updateCaseLetter(cid, lv => { lv.pages = lv.pages.filter(x => x.id !== pid); })) refreshLetterBox(cid);
+      });
+      break;
+    }
     case 'forward': decide(t.dataset.id, 'forwarded'); break;
     case 'director-return': decide(t.dataset.id, 'director_returned'); break;
     case 'return': decide(t.dataset.id, 'returned'); break;
@@ -2622,16 +2644,6 @@ document.addEventListener('click', e => {
     case 'locate': useMyLocation(); break;
     case 'clear-loc': clearLocation(); break;
     case 'clear-sig': clearSig(t.dataset.key); break;
-    case 'del-lv': {
-      const i = W.d.livestock.pages.findIndex(x => x.id === t.dataset.id);
-      if (i >= 0) { W.d.livestock.pages.splice(i, 1); renderLetter(); saveNow(); refreshValidation(); $('#lvCam').focus(); }
-      break;
-    }
-    case 'zoom-lv': {
-      const pages = W.d.livestock.pages, ph = pages.find(x => x.id === t.dataset.id);
-      if (ph) openViewer(ph.preview, 'كتاب الثروة الحيوانية — صفحة ' + (pages.indexOf(ph) + 1), '');
-      break;
-    }
     case 'mock-loc': mockLocate('تعذر الحصول على موقع الجهاز؛'); break;
     case 'photo-loc': {
       const ph = W.d.photos.find(x => x.id === t.dataset.id);
@@ -2700,9 +2712,10 @@ document.addEventListener('submit', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.matches('[data-lv-input]')) { const files = Array.from(t.files || []); t.value = ''; addLetterPages(t.dataset.id, files); return; }
+  if (t.matches('[data-lvr]')) { const k = t.dataset.lvr, v = latinDigits(t.value).trim(); updateCaseLetter(t.dataset.id, lv => { lv[k] = k === 'date' ? t.value : v; }); return; }
   if (!W || !t.closest('#wizard')) return;
   if (t.matches('[data-photo-input]')) { addPhotos(t.files).finally(() => { t.value = ''; }); return; }
-  if (t.matches('[data-lv-input]')) { addLetterPages(t.files).finally(() => { t.value = ''; }); return; }
   if (t.type === 'radio' || t.type === 'checkbox' || t.tagName === 'SELECT') onWizardField(t);
 });
 document.addEventListener('keydown', e => {
