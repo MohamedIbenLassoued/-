@@ -1509,53 +1509,61 @@ function mockLocate(reason) {
       ' لأغراض العرض فقط، وتظهر في المحضر بوصف «محاكاة GPS». للموقع الحقيقي: التقط صورة تحفظ الموقع، أو الصق الإحداثيات من الخرائط.');
   }, 1100);
 }
+/* True where the device location cannot be used: inside an embedded viewer, on the claude.ai
+   artifact host, or when the page's permissions policy disallows geolocation. */
+function geolocationBlocked() {
+  try {
+    const pol = document.permissionsPolicy || document.featurePolicy;
+    if (pol && typeof pol.allowsFeature === 'function' && !pol.allowsFeature('geolocation')) return true;
+  } catch (e) { /* ignore */ }
+  if (EMBEDDED) return true;
+  if (window.claude && typeof window.claude.use === 'function') return true;
+  return /(^|\.)claude\.(ai|site)$|claudeusercontent|anthropic/i.test(location.hostname || '');
+}
 function useMyLocation() {
   const btn = $('#locBtn');
-  if (EMBEDDED) { mockLocate('المنصة تمنع الوصول إلى موقع الجهاز داخل claude.ai؛'); return; }
-  if (!('geolocation' in navigator)) {
-    locMsg('bad', '<strong>تحديد الموقع غير متاح</strong>هذا الجهاز أو المتصفح لا يدعم خدمة تحديد الموقع. أدخل الإحداثيات يدوياً، أو حدد النقطة على الخريطة، أو اكتب وصفاً للموقع.');
-    return;
-  }
-  if (window.isSecureContext === false) {
-    locMsg('bad', '<strong>تحديد الموقع غير متاح في هذه الصفحة</strong>يتطلب المتصفح فتح التطبيق عبر اتصال آمن (https) أو كملف محلي. أدخل الإحداثيات يدوياً أو اكتب وصف الموقع.');
-    return;
-  }
+  // The button always ends with a location: real GPS where possible, otherwise a clearly marked demo location.
+  if (geolocationBlocked()) { mockLocate('المنصة تمنع الوصول إلى موقع الجهاز داخل claude.ai؛'); return; }
+  if (!('geolocation' in navigator)) { mockLocate('هذا المتصفح لا يدعم خدمة تحديد الموقع؛'); return; }
+  if (window.isSecureContext === false) { mockLocate('تحديد الموقع يتطلب فتح التطبيق عبر https؛'); return; }
   btn.disabled = true;
   btn.setAttribute('aria-busy', 'true');
   btn.querySelector('span').textContent = 'جارٍ تحديد الموقع…';
-  locMsg('info', 'جارٍ الحصول على موقعك من GPS… قد يستغرق ذلك حتى 20 ثانية. يُفضّل الوقوف في مكان مكشوف.');
+  locMsg('info', 'جارٍ الحصول على موقعك من GPS… يُفضّل الوقوف في مكان مكشوف.');
   const wizard = W;
-  const done = ok => {
-    if (W !== wizard) return false;
+  let settled = false;
+  const finish = () => {
+    if (settled || W !== wizard) return false;
+    settled = true;
+    clearTimeout(watchdog);
     btn.disabled = false;
     btn.removeAttribute('aria-busy');
-    btn.querySelector('span').textContent = ok ? 'تحديث موقعي' : 'استخدام موقعي';
+    btn.querySelector('span').textContent = 'تحديث موقعي';
     return true;
   };
-  navigator.geolocation.getCurrentPosition(pos => {
-    if (!done(true)) return;
-    const { latitude, longitude, accuracy } = pos.coords;
-    setLocation(latitude, longitude, accuracy, 'gps');
-    const acc = Math.round(accuracy);
-    if (acc > 100) locMsg('warn', '<strong>تم تحديد الموقع بدقة منخفضة (±' + acc + ' م)</strong>يمكنك إعادة المحاولة في مكان مكشوف، أو تعديل النقطة على الخريطة.');
-    else locMsg('ok', 'تم تحديد موقعك بدقة تقارب ±' + acc + ' متر.');
-    if (!inQatar(latitude, longitude)) locMsg('warn', '<strong>الموقع خارج حدود دولة قطر</strong>تحقق من صحة الموقع قبل المتابعة.');
-  }, err => {
-    if (!done(false)) return;
-    if (EMBEDDED && err.code === 1) {
-      // Device location is blocked by the hosting viewer itself, not by the inspector's settings.
-      locMsg('info', locationBlockedHelp());
-      const lat = $('#f-lat'); if (lat && !lat.value) lat.focus();
-      return;
-    }
-    const M = {
-      1: '<strong>تم رفض إذن الوصول إلى الموقع</strong>فعّل إذن الموقع لهذا المتصفح من إعدادات الجهاز ثم اضغط «استخدام موقعي» مرة أخرى، أو أدخل الإحداثيات يدوياً.',
-      2: '<strong>تعذر تحديد الموقع حالياً</strong>إشارة GPS غير متوفرة. تأكد من تفعيل خدمة الموقع في الجهاز، أو انتقل إلى مكان مكشوف، أو أدخل الإحداثيات يدوياً.',
-      3: '<strong>انتهت مهلة تحديد الموقع</strong>لم تصل إشارة GPS في الوقت المحدد. أعد المحاولة، أو أدخل الإحداثيات يدوياً، أو حدد النقطة على الخريطة.'
-    };
-    locMsg('bad', (M[err.code] || '<strong>تعذر تحديد الموقع</strong>حدث خطأ غير متوقع. أدخل الإحداثيات يدوياً أو اكتب وصف الموقع.') +
-      '<div style="margin-top:8px"><button class="btn secondary sm" type="button" data-action="mock-loc">استخدام موقع تجريبي (محاكاة)</button></div>');
-  }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  // Some in-app browsers never answer a location request: fall back after 12 seconds.
+  const watchdog = setTimeout(() => { if (finish()) mockLocate('لم يستجب الجهاز لطلب الموقع؛'); }, 12000);
+  try {
+    navigator.geolocation.getCurrentPosition(pos => {
+      if (!finish()) return;
+      const { latitude, longitude, accuracy } = pos.coords;
+      setLocation(latitude, longitude, accuracy, 'gps');
+      const acc = Math.round(accuracy);
+      if (acc > 100) locMsg('warn', '<strong>تم تحديد الموقع بدقة منخفضة (±' + acc + ' م)</strong>يمكنك إعادة المحاولة في مكان مكشوف، أو تعديل النقطة على الخريطة.');
+      else locMsg('ok', 'تم تحديد موقعك بدقة تقارب ±' + acc + ' متر.');
+      if (!inQatar(latitude, longitude)) locMsg('warn', '<strong>الموقع خارج حدود دولة قطر</strong>تحقق من صحة الموقع قبل المتابعة.');
+    }, err => {
+      if (!finish()) return;
+      const R = {
+        1: 'تم رفض إذن الوصول إلى الموقع (يمكن تفعيله من إعدادات المتصفح)؛',
+        2: 'إشارة GPS غير متوفرة حالياً؛',
+        3: 'انتهت مهلة تحديد الموقع قبل وصول إشارة GPS؛'
+      };
+      mockLocate(R[err && err.code] || 'تعذر تحديد موقع الجهاز؛');
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+  } catch (e) {
+    if (finish()) mockLocate('تعذر طلب موقع الجهاز؛');
+  }
 }
 function clearLocation() {
   W.raw.lat = ''; W.raw.lng = '';
