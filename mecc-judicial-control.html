@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#8A1538">
 <meta name="color-scheme" content="light">
-<title>محاضر الضبط القضائي | وزارة البيئة والتغير المناخي</title>
+<title>نظام الرصد | وزارة البيئة والتغير المناخي</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
@@ -427,6 +427,24 @@ dialog.viewer::backdrop{background:rgba(20,10,14,.7)}
 .viewer p{padding:10px 16px 14px;font-size:.92rem;overflow-wrap:anywhere}
 
 #printArea{display:none}
+/* نظام الرصد: system choice */
+body.hub .sidebar,body.hub .bottomnav,body.hub #backdrop,body.hub #menuBtn{display:none!important}
+body.hub .app{display:block}
+body.hub main{max-width:880px;padding-bottom:32px}
+.sys-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.sys-card{display:flex;flex-direction:column;gap:8px;padding:20px;border-radius:18px;background:#fff;border:1px solid var(--line);box-shadow:var(--sh);text-decoration:none;color:var(--text);min-height:180px;min-width:0}
+.sys-card:hover{border-color:var(--maroon-200);background:var(--maroon-50)}
+.sys-card.main{border-top:5px solid var(--maroon)}
+.sys-ic{width:56px;height:56px;border-radius:16px;background:var(--maroon-50);color:var(--maroon);display:grid;place-items:center;flex:none}
+.sys-card.main .sys-ic{background:var(--maroon);color:#fff}
+.sys-card h2{font-size:1.3rem;margin-top:4px}
+.sys-card p{color:var(--text-2)}
+.sys-role{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;font-size:.8rem;font-weight:700;color:var(--maroon-ink);background:var(--maroon-50);border:1px solid var(--maroon-200);border-radius:99px;padding:2px 10px}
+.sys-role .ic{width:16px;height:16px}
+.sys-card .go{margin-top:auto;display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--maroon);min-height:32px}
+.hub-foot{display:flex;justify-content:center;margin-top:18px}
+.sys-page{display:flex;flex-direction:column;gap:10px;align-items:flex-start;padding:24px;margin-top:6px}
+@media (min-width:700px){.sys-grid{grid-template-columns:1fr 1fr}}
 /* login (mock) */
 body.auth .sidebar,body.auth .topbar,body.auth .bottomnav,body.auth #backdrop{display:none!important}
 body.auth .app{display:block}
@@ -580,7 +598,7 @@ dialog.confirm{width:min(92vw,440px)}
   <aside class="sidebar" id="sidebar" aria-label="القائمة الرئيسية">
     <div class="side-head">
       <span class="brand-mark" aria-hidden="true">MECC</span>
-      <span class="brand-text"><strong>وزارة البيئة والتغير المناخي</strong><span>دولة قطر · محاضر الضبط القضائي</span></span>
+      <span class="brand-text"><strong>وزارة البيئة والتغير المناخي</strong><span>دولة قطر · نظام الرصد</span></span>
       <button class="icon-btn" type="button" data-action="close-drawer" aria-label="إغلاق القائمة"></button>
     </div>
     <p class="side-label" id="sidePortalLabel">بوابة المفتش</p>
@@ -597,9 +615,9 @@ dialog.confirm{width:min(92vw,440px)}
   <div class="shell">
     <header class="topbar">
       <button class="icon-btn" id="menuBtn" type="button" data-action="menu" aria-label="فتح القائمة" aria-controls="sidebar" aria-expanded="false"></button>
-      <a class="brand" href="#home" aria-label="الصفحة الرئيسية — وزارة البيئة والتغير المناخي">
+      <a class="brand" href="#systems" aria-label="نظام الرصد — اختيار النظام">
         <span class="brand-mark" aria-hidden="true">MECC</span>
-        <span class="brand-text"><strong>وزارة البيئة والتغير المناخي</strong><span>محاضر الضبط القضائي</span></span>
+        <span class="brand-text"><strong>وزارة البيئة والتغير المناخي</strong><span id="brandSub">نظام الرصد</span></span>
       </a>
       <span class="portal-pill" id="portalPill">بوابة المفتش</span>
     </header>
