@@ -344,6 +344,11 @@ table.rows{width:100%;border-collapse:collapse;font-size:.92rem}
 /* photos */
 .photo-actions{display:grid;grid-template-columns:1fr;gap:10px}
 .photo-actions .btn{min-height:54px}
+.file-btn{position:relative;overflow:hidden;cursor:pointer}
+.file-btn input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0;z-index:1}
+.file-btn:has(input:focus-visible){outline:3px solid var(--maroon);outline-offset:2px}
+.file-btn.is-disabled{opacity:.5;cursor:not-allowed}
+.file-btn.is-disabled input{cursor:not-allowed}
 .counter{font-weight:700;font-size:.85rem;color:var(--text-2);background:var(--surface-2);border:1px solid var(--line);border-radius:99px;padding:2px 12px;direction:ltr;unicode-bidi:isolate;display:inline-block}
 .photo-list{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:10px}
 .pcard{display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px 12px;padding:10px;border:1px solid var(--line);border-radius:14px;background:#fff;min-width:0}

@@ -993,11 +993,11 @@ function wizardHTML(rec) {
       '<div class="card-head"><h3 id="evH">الأدلة والصور <span class="req">*</span></h3><span class="counter" id="photoCount">0 / ' + MAX_PHOTOS + '</span></div>' +
       '<p class="hint" style="margin:-4px 0 12px">حتى ' + MAX_PHOTOS + ' صور، بحد أقصى 10 م.ب للصورة الواحدة. الصيغ المقبولة: JPG وPNG وWEBP. تُحفظ نسخة عرض مصغّرة فقط.</p>' +
       '<div class="photo-actions">' +
-        '<button class="btn primary lg" type="button" data-action="pick" data-target="camInput" id="camBtn">' + icon('camera', 'ic-lg') + 'التقاط صورة</button>' +
-        '<button class="btn secondary lg" type="button" data-action="pick" data-target="fileInput" id="fileBtn">' + icon('image', 'ic-lg') + 'اختيار من الجهاز</button>' +
+        '<label class="btn primary lg file-btn" id="camBtn">' + icon('camera', 'ic-lg') + '<span>التقاط صورة</span>' +
+          '<input type="file" id="camInput" accept="image/*" capture="environment" data-photo-input aria-label="التقاط صورة بالكاميرا"></label>' +
+        '<label class="btn secondary lg file-btn" id="fileBtn">' + icon('image', 'ic-lg') + '<span>اختيار من الجهاز</span>' +
+          '<input type="file" id="fileInput" accept="image/*" multiple data-photo-input aria-label="اختيار صور من الجهاز"></label>' +
       '</div>' +
-      '<input type="file" id="camInput" accept="image/*" capture="environment" data-photo-input hidden tabindex="-1">' +
-      '<input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" multiple data-photo-input hidden tabindex="-1">' +
       '<div class="busy" id="photoBusy" hidden><span class="spinner" aria-hidden="true"></span><span>جارٍ تجهيز الصور…</span></div>' +
       '<div id="photoMsg" aria-live="assertive"></div>' +
       '<ul class="photo-list" id="photoList" aria-label="الصور المرفقة"></ul>' +
@@ -1525,8 +1525,8 @@ function toJpeg(img, max, q) {
 }
 async function processImage(f) {
   if (f.size === 0) throw new Error('الملف فارغ أو تالف.');
-  if (f.size > MAX_BYTES) throw new Error('حجم الملف ' + fmtBytes(f.size) + ' يتجاوز الحد المسموح (10 م.ب).');
-  const declared = MIME_ALIASES[f.type] || f.type;
+  if (f.size > MAX_BYTES) throw new Error('حجم الملف ' + fmtBytes(f.size) + ' يتجاوز الحد المسموح (10 م.ب). خفّض دقة الكاميرا (مثل 12 ميغابكسل) ثم أعد الالتقاط.');
+  const declared = (f.type === 'application/octet-stream') ? '' : (MIME_ALIASES[f.type] || f.type);
   const actual = await sniffType(f);
   if (declared === 'image/heic' || declared === 'image/heif' || actual === 'image/heic') throw new Error('صيغة HEIC غير مدعومة في المتصفح. اختر صورة JPG أو PNG، أو اضبط الكاميرا على صيغة «الأكثر توافقاً».');
   if (declared && !ALLOWED_MIME.includes(declared)) throw new Error('نوع الملف (' + (declared || 'غير معروف') + ') غير مسموح. الصيغ المقبولة: JPG وPNG وWEBP.');
@@ -1551,7 +1551,7 @@ async function addPhotos(fileList) {
   let added = 0, skipped = 0;
   W.busy = true;
   $('#photoBusy').hidden = false;
-  $('#camBtn').disabled = $('#fileBtn').disabled = true;
+  setPhotoInputsDisabled(true);
   for (const f of files) {
     if (W !== wizard) return;
     if (W.d.photos.length >= MAX_PHOTOS) { skipped++; continue; }
@@ -1577,9 +1577,12 @@ async function addPhotos(fileList) {
     }
   }
 }
+function setPhotoInputsDisabled(off) {
+  ['camInput', 'fileInput'].forEach(id => { const i = document.getElementById(id); if (i) { i.disabled = off; i.parentNode.classList.toggle('is-disabled', off); } });
+}
 function updatePhotoButtons() {
   const full = W.d.photos.length >= MAX_PHOTOS;
-  $('#camBtn').disabled = $('#fileBtn').disabled = full || W.busy;
+  setPhotoInputsDisabled(full || W.busy);
   $('#photoCount').textContent = W.d.photos.length + ' / ' + MAX_PHOTOS;
 }
 function renderPhotos() {
@@ -1620,8 +1623,8 @@ function validateStep(s) {
     if (!d.violationNos.length) e.push({ f: 'vList', m: 'اختر مخالفة واحدة على الأقل.' });
     if (needsChips() && !d.chips.some(x => String(x).trim())) e.push({ f: 'chip0', m: 'أدخل رقم شريحة إبل واحداً على الأقل لمخالفات الرعي (البنود 1–4).' });
     d.chips.forEach((x, i) => { if (String(x).trim() && !/^[0-9A-Za-z\- ]{3,30}$/.test(latinDigits(x).trim())) e.push({ f: 'chip' + i, m: 'رقم الشريحة ' + (i + 1) + ' يحتوي على رموز غير صالحة.' }); });
-    if (W.busy) e.push({ f: 'camBtn', m: 'انتظر حتى ينتهي تجهيز الصور.' });
-    else if (!d.photos.length) e.push({ f: 'camBtn', m: 'أرفق صورة واحدة على الأقل للمخالفة (التقاط صورة أو اختيار من الجهاز).' });
+    if (W.busy) e.push({ f: 'camInput', m: 'انتظر حتى ينتهي تجهيز الصور.' });
+    else if (!d.photos.length) e.push({ f: 'camInput', m: 'أرفق صورة واحدة على الأقل للمخالفة (التقاط صورة أو اختيار من الجهاز).' });
   }
   if (s === 3) {
     if (!d.person.trim()) e.push({ f: 'f-person', m: 'أدخل اسم المخالف.' });
@@ -2379,11 +2382,6 @@ document.addEventListener('click', e => {
       const first = $('#chipList input'); if (first) first.focus();
       break;
     }
-    case 'pick': {
-      if (W.d.photos.length >= MAX_PHOTOS) { toast('تم بلوغ الحد الأقصى (8 صور).', 'bad'); break; }
-      document.getElementById(t.dataset.target).click();
-      break;
-    }
     case 'del-photo': {
       const pid = t.dataset.id, wizard = W;
       const i0 = W.d.photos.findIndex(p => p.id === pid);
@@ -2398,7 +2396,7 @@ document.addEventListener('click', e => {
       refreshValidation();
       $('#photoMsg').innerHTML = '<p class="sr-only">تم حذف الصورة.</p>';
       const next = $$('#photoList [data-action="del-photo"]')[Math.min(i, W.d.photos.length - 1)];
-      (next || $('#camBtn')).focus();
+      (next || $('#camInput')).focus();
       });
       break;
     }
