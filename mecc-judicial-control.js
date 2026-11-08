@@ -108,6 +108,7 @@ const SECURITY_CENTERS = [
 const AREA_SUGGESTIONS = ['الغارية', 'الخريب', 'الجميلية', 'أم قرن', 'الكرعانة', 'سيلين', 'أبو سمرة', 'دخان', 'الزبارة', 'الرويس', 'الخويرية',
   'فويرط', 'العريش', 'روضة راشد', 'الخرسعة', 'العريق', 'أم باب', 'الكعبان', 'سميسمة', 'الذخيرة', 'الغويرية', 'مسيعيد', 'الوكير', 'أبو نخلة', 'الشيحانية'];
 const MAX_LETTER_PAGES = 2;
+const MAX_CHIP_PHOTOS = 8;
 const STEPS = ['الموقع والزمان والصور', 'المخالفات', 'بيانات المخالف والمراجعة'];
 const STEPS_SHORT = ['الموقع والصور', 'المخالفات', 'المخالف'];
 
@@ -240,7 +241,8 @@ function normalize(raw) {
   }
   c.violationNos = Array.from(new Set(c.violationNos.map(Number).filter(n => VBY[n]))).sort((a, b) => a - b);
   c.legacyViolations = (Array.isArray(c.violations) ? c.violations : []).filter(v => typeof v === 'string' && !LEGACY_VIOLATIONS.includes(v) && !VIOLATIONS.some(x => x.text === v));
-  c.chips = (Array.isArray(c.chips) ? c.chips : []).map(x => String(x)).filter(x => x.trim());
+  c.chips = (Array.isArray(c.chips) ? c.chips : []).map(x => String(x)).filter(x => x.trim()); // legacy typed numbers
+  c.chipPhotos = (Array.isArray(c.chipPhotos) ? c.chipPhotos : []).filter(x => x && x.preview);
   // كتاب إدارة الثروة الحيوانية (camel chip certificate) — attached for grazing violations
   const lv = c.livestock && typeof c.livestock === 'object' ? c.livestock : null;
   c.livestock = lv ? { reqNo: String(lv.reqNo || ''), date: String(lv.date || ''), pages: (Array.isArray(lv.pages) ? lv.pages : []).filter(x => x && x.preview) } : null;
@@ -350,7 +352,7 @@ function renderShell(portal, p) {
     '<a href="#" data-action="logout">' + icon('logout') + '<span>تسجيل الخروج</span></a>' : '';
   const bn = NAV[portal].concat([{ h: '#systems', k: 'systems', label: 'الأنظمة', icon: 'grid' }]);
   const cur0 = NAV[portal].find(it => it.k === key);
-  $('#crumb').innerHTML = '<a href="#systems">نظام الرصد</a>' + icon('next') + '<span>نظام المحاضر</span>' + icon('next') + '<a href="' + NAV[portal][0].h + '">' + esc(PORTALS[portal].long) + '</a>' +
+  $('#crumb').innerHTML = '<a href="#systems">الرصد البيئي</a>' + icon('next') + '<span>نظام المحاضر</span>' + icon('next') + '<a href="' + NAV[portal][0].h + '">' + esc(PORTALS[portal].long) + '</a>' +
     (cur0 && cur0 !== NAV[portal][0] ? icon('next') + '<span aria-current="page">' + esc(cur0.label) + '</span>' : '');
   $('#bottomnav').innerHTML = bn.map(it => '<a href="' + it.h + '"' + cur(it) + (it.accent ? ' class="accent"' : '') + (it.action ? ' data-action="' + it.action + '"' : '') + '><span class="bn-icon">' + icon(it.icon) + '</span><span>' + it.label + '</span></a>').join('');
 }
@@ -466,7 +468,7 @@ function renderLogin(view) {
     '<div class="login">' +
       '<section class="id-band login-band">' +
         '<div class="id-org"><span class="brand-mark" aria-hidden="true">MECC</span><span><strong>وزارة البيئة والتغير المناخي</strong><small>دولة قطر · إدارة الحماية البرية</small></span></div>' +
-        '<h1>نظام الرصد</h1>' +
+        '<h1>الرصد البيئي</h1>' +
         '<p>رصد المخالفات البيئية والمخلفات البرية ميدانياً، ومتابعة المحاضر حتى اعتمادها.</p>' +
       '</section>' +
       '<div class="login-card">' +
@@ -514,14 +516,14 @@ function submitLogin() {
 }
 
 /* ------------------------------------------------------------------ *
- * نظام الرصد — system choice after sign-in
+ * الرصد البيئي — system choice after sign-in
  * ------------------------------------------------------------------ */
 /* رصد المخلفات البرية is a separate, completed system. Put its address here to show an
    "open" button on its page (e.g. 'https://...'); left empty, the page shows its title only. */
 const WASTE_SYSTEM_URL = '';
 function renderSystems(view, user) {
   view.innerHTML =
-    '<section class="id-band hub-band"><p class="id-eyebrow">نظام الرصد</p><h1>' + greeting() + '، ' + esc(user.name) + '</h1>' +
+    '<section class="id-band hub-band"><p class="id-eyebrow">الرصد البيئي</p><h1>' + greeting() + '، ' + esc(user.name) + '</h1>' +
       '<p>اختر نوع الرصد للمتابعة.</p></section>' +
     '<div class="sys-grid">' +
       '<a class="sys-card" href="#waste"><span class="sys-ic">' + icon('trash', 'ic-lg') + '</span>' +
@@ -539,7 +541,7 @@ function renderWaste(view) {
   view.innerHTML =
     '<a class="back-link" href="#systems">' + icon('prev') + 'العودة إلى اختيار النظام</a>' +
     '<section class="card sys-page"><span class="sys-ic">' + icon('trash', 'ic-lg') + '</span>' +
-      '<p class="eyebrow">نظام الرصد</p><h1>رصد المخلفات البرية</h1>' +
+      '<p class="eyebrow">الرصد البيئي</p><h1>رصد المخلفات البرية</h1>' +
       '<p class="lead">نظام رصد المخلفات البرية نظام مستقل ومكتمل، ولا يتضمن هذا النموذج شاشاته.</p>' +
       (WASTE_SYSTEM_URL ? '<a class="btn primary lg" href="' + esc(WASTE_SYSTEM_URL) + '" target="_blank" rel="noopener">فتح نظام رصد المخلفات' + icon('next') + '</a>' : '') +
     '</section>';
@@ -634,30 +636,30 @@ function render() {
   if (!user) {
     document.body.classList.add('auth');
     if (location.hash !== '#login') history.replaceState(null, '', '#login');
-    document.title = renderLogin(view) + ' | نظام الرصد';
+    document.title = renderLogin(view) + ' | الرصد البيئي';
     window.scrollTo(0, 0);
     return;
   }
   document.body.classList.remove('auth');
   const p = parseRoute();
   if (!p.length || p[0] === 'login' || p[0] === 'systems' || p[0] === 'waste') {
-    // نظام الرصد: choose between رصد المخلفات and رصد المخالفات (نظام المحاضر)
+    // الرصد البيئي: choose between رصد المخلفات and رصد المخالفات (نظام المحاضر)
     if (p[0] !== 'systems' && p[0] !== 'waste') history.replaceState(null, '', '#systems');
     document.body.classList.add('hub');
     document.body.classList.remove('auth');
-    $('#brandSub').textContent = 'نظام الرصد';
+    $('#brandSub').textContent = 'الرصد البيئي';
     $('#portalPill').textContent = user.title;
     $('#portalPill').setAttribute('aria-label', 'المستخدم: ' + user.name + ' — ' + user.title);
     $('#bottomnav').innerHTML = '';
     const t = p[0] === 'waste' ? renderWaste(view) : renderSystems(view, user);
-    document.title = t + ' | نظام الرصد';
+    document.title = t + ' | الرصد البيئي';
     window.scrollTo(0, 0);
     const h1 = $('#view h1');
     if (h1 && renderCount++ > 0) { h1.setAttribute('tabindex', '-1'); h1.focus({ preventScroll: true }); }
     return;
   }
   document.body.classList.remove('hub');
-  $('#brandSub').textContent = 'نظام الرصد · نظام المحاضر';
+  $('#brandSub').textContent = 'الرصد البيئي · نظام المحاضر';
   const portal = p[0] === 'admin' || p[0] === 'director' ? p[0] : 'inspector';
   // Each signed-in role sees only its own portal.
   if (portal !== user.role || p[0] === 'login') { location.replace(PORTALS[user.role].h); return; }
@@ -676,7 +678,7 @@ function render() {
   else if (p[0] === 'edit' && p[1]) title = renderWizard(view, p[1]);
   else if (p[0] === 'view' && p[1]) title = renderInspectorView(view, p[1]);
   else title = renderHome(view);
-  document.title = (title || 'الرئيسية') + ' | نظام المحاضر | نظام الرصد';
+  document.title = (title || 'الرئيسية') + ' | نظام المحاضر | الرصد البيئي';
   window.scrollTo(0, 0);
   const h = $('#view h1');
   if (h && renderCount++ > 0) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
@@ -750,6 +752,7 @@ function detailSections(c, opts) {
     c.legacyViolations.map(t => '<li><span class="vnum">—</span><span>' + esc(t) + ' <span class="muted">(بند من نسخة سابقة)</span></span></li>').join('');
   const viol = '<section class="card" aria-labelledby="sec-viol"><h2 id="sec-viol" class="review-sec-head">المخالفات المضبوطة</h2>' +
     (vlist ? '<ul class="vsum">' + vlist + '</ul>' : '<p class="muted">لم تحدد مخالفات.</p>') +
+    (c.chipPhotos.length ? '<div style="margin-top:12px"><p class="label">صور شرائح الإبل</p><div class="gallery">' + c.chipPhotos.map((ph, i) => '<figure><button type="button" data-action="zoom" data-kind="chip" data-case="' + esc(c.id) + '" data-id="' + esc(ph.id) + '" aria-label="تكبير صورة الشريحة ' + (i + 1) + '"><img src="' + esc(ph.thumb || ph.preview) + '" alt="" loading="lazy"></button><figcaption><b>شريحة ' + (i + 1) + '</b></figcaption></figure>').join('') + '</div></div>' : '') +
     (c.chips.length ? '<div style="margin-top:12px"><p class="label">أرقام شرائح الإبل</p><div class="chips-view">' + c.chips.map(x => '<span>' + esc(x) + '</span>').join('') + '</div></div>' : '') +
     (isGrazing(c) && !(c.livestock && c.livestock.pages.length) ? '<div style="margin-top:12px"><p class="label">كتاب إدارة الثروة الحيوانية</p><p class="hint" style="margin:0">' +
       (c.status === 'approved' ? 'لم يُرفق.' : 'يُرفق عند اعتماد المدير.') + '</p></div>' : '') +
@@ -951,7 +954,7 @@ function blankData() {
     date: todayISO(), time: nowTime(), inspectorName: p.name || '', inspectorNo: p.no || '',
     place: '', securityCenter: '', area: '', lat: null, lng: null, accuracy: null, locSource: null, locAt: null,
     livestock: { reqNo: '', date: '', pages: [] },
-    violationNos: [], chips: [], notes: '', photos: [],
+    violationNos: [], chips: [], chipPhotos: [], notes: '', photos: [],
     offenderType: 'person', person: '', qid: '', phone: '', address: '', section: '', settlement: '', signature: 'unspecified',
     offenderSig: '', inspectorSig: '', officerCard: (Array.isArray(p.officerCard) ? p.officerCard : []).slice(0, 2)
   };
@@ -978,7 +981,6 @@ function renderWizard(view, id) {
     raw: { lat: d.lat != null ? String(d.lat) : '', lng: d.lng != null ? String(d.lng) : '' },
     saveTimer: null, map: null, marker: null, busy: false, maxStep: rec ? 3 : 1, tried: false, errSteps: new Set()
   };
-  if (needsChips() && !W.d.chips.length) W.d.chips = [''];
   document.body.classList.add('in-wizard');
   document.documentElement.classList.add('in-wizard');
   view.innerHTML = wizardHTML(rec);
@@ -996,12 +998,17 @@ function wizardHTML(rec) {
   const d = W.d;
   const ret = rec && rec.status === 'returned' ? latestReturn(rec) : null;
   const older = rec ? rec.returnComments.slice(0, -1) : [];
-  /* Camel chip numbers sit directly under the grazing violations (1–4) that require them. */
+  const legacyChips = (d.chips || []).filter(x => String(x).trim()).join('، ');
+  /* Camel chip photos (taken with the camera) sit directly under the ticked grazing violation (1–4). */
   const chipBox = '<div class="chip-box" id="chipBox" hidden>' +
-      '<div class="card-head" style="margin-bottom:6px"><h3 id="chipH">' + icon('chip') + ' أرقام شرائح الإبل <span class="req">*</span></h3></div>' +
-      '<p class="hint" style="margin:0 0 10px">مطلوبة لمخالفات الرعي (البنود 1–4). أضف رقماً لكل شريحة.</p>' +
-      '<div id="chipList" role="group" aria-labelledby="chipH"></div>' +
-      '<button class="btn secondary block" type="button" data-action="add-chip">' + icon('plus') + 'إضافة رقم شريحة</button>' +
+      '<div class="card-head" style="margin-bottom:6px"><h3 id="chipH">' + icon('chip') + ' صور شرائح الإبل <span class="req">*</span></h3><span class="counter" id="chipCount">0 / ' + MAX_CHIP_PHOTOS + '</span></div>' +
+      '<p class="hint" style="margin:0 0 10px">مطلوبة لمخالفات الرعي (البنود 1–4). التقط بالكاميرا صورة لكل شريحة أو لشاشة قارئ الشريحة.</p>' +
+      (legacyChips ? '<p class="hint" style="margin:0 0 10px">أرقام مسجلة سابقاً: <bdi dir="ltr">' + esc(legacyChips) + '</bdi></p>' : '') +
+      '<label class="btn primary block lg file-btn" id="chipCamBtn">' + icon('camera', 'ic-lg') + '<span>تصوير الشريحة بالكاميرا</span>' +
+        '<input type="file" id="chipCam" accept="image/*" capture="environment" data-chip-input aria-label="تصوير شريحة الإبل بالكاميرا"></label>' +
+      '<div class="busy" id="chipBusy" hidden><span class="spinner" aria-hidden="true"></span><span>جارٍ تجهيز الصورة…</span></div>' +
+      '<div id="chipMsg" aria-live="assertive"></div>' +
+      '<ul class="lv-list" id="chipList" aria-label="صور الشرائح"></ul>' +
     '</div>';
   const vgroups = Object.keys(CATS).map(cat => {
     const items = VIOLATIONS.filter(v => v.cat === cat);
@@ -1203,6 +1210,7 @@ function serialize(d) {
     section: d.section, violationNos: d.violationNos.slice().sort((a, b) => a - b),
     violations: d.violationNos.slice().sort((a, b) => a - b).map(n => VBY[n].text),
     chips: needsChips() ? d.chips.map(x => latinDigits(x).trim()).filter(Boolean) : [],
+    chipPhotos: needsChips() ? d.chipPhotos : [],
     notes: d.notes, photos: d.photos,
     offenderType: 'person', person: d.person.trim(), qid: latinDigits(d.qid).trim(), phone: latinDigits(d.phone).trim(),
     address: d.address, settlement: d.settlement, signature: d.signature,
@@ -1210,7 +1218,7 @@ function serialize(d) {
   };
 }
 function isEmptyDraft(d) {
-  return !(d.place.trim() || d.area.trim() || d.securityCenter || W.raw.lat.trim() || W.raw.lng.trim() || d.violationNos.length || d.notes.trim() || d.photos.length ||
+  return !(d.place.trim() || d.area.trim() || d.securityCenter || W.raw.lat.trim() || W.raw.lng.trim() || d.violationNos.length || d.notes.trim() || d.photos.length || d.chipPhotos.length ||
     d.person.trim() || d.qid.trim() || d.phone.trim() || d.address.trim() || d.section.trim());
 }
 function saveNow() {
@@ -1292,11 +1300,6 @@ function onWizardField(t) {
     refreshValidation();
   } else if (t.matches('[data-v]')) {
     toggleViolation(Number(t.dataset.v), t.checked);
-  } else if (t.matches('[data-chip]')) {
-    W.d.chips[Number(t.dataset.chip)] = t.value;
-    t.removeAttribute('aria-invalid');
-    scheduleSave();
-    refreshValidation();
   } else if (t.matches('[data-pf]')) {
     const ph = W.d.photos.find(p => p.id === t.dataset.id);
     if (!ph) return;
@@ -1407,13 +1410,12 @@ function toggleViolation(no, on) {
   W.d.violationNos = Array.from(set).sort((a, b) => a - b);
   if (on && CHIP_REQUIRED.includes(no)) W.lastGrazing = no;
   updateViolationUI();
-  if (needsChips()) {
-    if (!W.d.chips.length) { W.d.chips = ['']; renderChips(); }
-  } else if (W.d.chips.length) {
-    const had = W.d.chips.some(x => String(x).trim());
+  if (!needsChips() && (W.d.chipPhotos.length || W.d.chips.length)) {
+    const had = W.d.chipPhotos.length > 0;
+    W.d.chipPhotos = [];
     W.d.chips = [];
     renderChips();
-    if (had) toast('أُزيلت أرقام شرائح الإبل لعدم اختيار أي من مخالفات الرعي (1–4).', 'info');
+    if (had) toast('أُزيلت صور شرائح الإبل لعدم اختيار أي من مخالفات الرعي (1–4).', 'info');
   }
   scheduleSave();
 }
@@ -1443,10 +1445,31 @@ function placeChipBox() {
 function renderChips() {
   const box = $('#chipList');
   if (!box) return;
-  box.innerHTML = W.d.chips.map((v, i) =>
-    '<div class="chip-row"><label class="sr-only" for="chip' + i + '">رقم الشريحة ' + (i + 1) + '</label>' +
-    '<input id="chip' + i + '" type="text" class="num-input" inputmode="numeric" data-chip="' + i + '" value="' + esc(v) + '" placeholder="مثال: 634097400062064" autocomplete="off" spellcheck="false">' +
-    '<button class="icon-btn danger" type="button" data-action="del-chip" data-i="' + i + '" aria-label="حذف رقم الشريحة ' + (i + 1) + '">' + icon('trash') + '</button></div>').join('');
+  const list = W.d.chipPhotos;
+  box.innerHTML = list.map((pg, i) => '<li class="lv-item"><button class="pthumb" type="button" data-action="zoom-chip" data-id="' + esc(pg.id) + '" aria-label="عرض صورة الشريحة ' + (i + 1) + '"><img src="' + esc(pg.thumb || pg.preview) + '" alt=""></button>' +
+    '<span class="meta"><b>شريحة ' + (i + 1) + '</b>' + (pg.origSize ? fmtBytes(pg.origSize) : '') + '</span>' +
+    '<button class="icon-btn danger" type="button" data-action="del-chip" data-id="' + esc(pg.id) + '" aria-label="حذف صورة الشريحة ' + (i + 1) + '">' + icon('trash') + '</button></li>').join('');
+  $('#chipCount').textContent = list.length + ' / ' + MAX_CHIP_PHOTOS;
+  const i = $('#chipCam'), full = list.length >= MAX_CHIP_PHOTOS;
+  if (i) { i.disabled = full; i.parentNode.classList.toggle('is-disabled', full); }
+}
+async function addChipPhotos(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length || !W) return;
+  const wizard = W, errors = [];
+  $('#chipBusy').hidden = false;
+  for (const f of files) {
+    if (W !== wizard) return;
+    if (W.d.chipPhotos.length >= MAX_CHIP_PHOTOS) { errors.push('الحد الأقصى ' + MAX_CHIP_PHOTOS + ' صور للشرائح.'); break; }
+    try { const pg = await processImage(f, 1400); delete pg.gps; W.d.chipPhotos.push(pg); }
+    catch (e) { errors.push('«' + (f.name || 'صورة') + '»: ' + e.message); }
+  }
+  if (W !== wizard) return;
+  $('#chipBusy').hidden = true;
+  renderChips();
+  $('#chipMsg').innerHTML = errors.length ? '<div class="msg bad" style="margin-top:10px">' + icon('alert') + '<div><ul>' + errors.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul></div></div>' : '';
+  refreshValidation();
+  if (!saveNow()) toast('تعذر حفظ صورة الشريحة محلياً: مساحة التخزين ممتلئة.', 'bad');
 }
 
 /* ---------- location ---------- */
@@ -1796,7 +1819,7 @@ function letterBoxHTML(c) {
   const id = esc(c.id);
   return '<div class="lv-box" id="lvBox">' +
     '<div class="card-head" style="margin-bottom:4px"><h3 id="lvH">' + icon('inbox') + ' كتاب إدارة الثروة الحيوانية <span class="req">*</span></h3><span class="counter">' + lv.pages.length + ' / ' + MAX_LETTER_PAGES + '</span></div>' +
-    '<p class="hint" style="margin:0 0 10px">مخالفة رعي: أرفق إفادة إدارة الثروة الحيوانية حول شريحة الإبل' + (c.chips.length ? ' (<bdi dir="ltr">' + esc(c.chips.join('، ')) + '</bdi>)' : '') + ' قبل الاعتماد.</p>' +
+    '<p class="hint" style="margin:0 0 10px">مخالفة رعي: أرفق إفادة إدارة الثروة الحيوانية حول شريحة الإبل' + (c.chips.length ? ' (<bdi dir="ltr">' + esc(c.chips.join('، ')) + '</bdi>)' : c.chipPhotos.length ? ' (صور الشرائح مرفقة في المحضر: ' + c.chipPhotos.length + ')' : '') + ' قبل الاعتماد.</p>' +
     '<div class="grid2">' +
       '<div class="field"><label for="lv-req">رقم طلب الإفادة <span class="opt">(اختياري)</span></label><input id="lv-req" type="text" class="num-input" inputmode="numeric" data-lvr="reqNo" data-id="' + id + '" value="' + esc(lv.reqNo) + '" autocomplete="off"></div>' +
       '<div class="field"><label for="lv-date">تاريخ الإفادة <span class="opt">(اختياري)</span></label><input id="lv-date" type="date" data-lvr="date" data-id="' + id + '" value="' + esc(lv.date) + '"></div>' +
@@ -1911,8 +1934,7 @@ function validateStep(s) {
   }
   if (s === 2) {
     if (!d.violationNos.length) e.push({ f: 'vList', m: 'اختر مخالفة واحدة على الأقل.' });
-    if (needsChips() && !d.chips.some(x => String(x).trim())) e.push({ f: 'chip0', m: 'أدخل رقم شريحة إبل واحداً على الأقل لمخالفات الرعي (البنود 1–4).' });
-    d.chips.forEach((x, i) => { if (String(x).trim() && !/^[0-9A-Za-z\- ]{3,30}$/.test(latinDigits(x).trim())) e.push({ f: 'chip' + i, m: 'رقم الشريحة ' + (i + 1) + ' يحتوي على رموز غير صالحة.' }); });
+    if (needsChips() && !d.chipPhotos.length) e.push({ f: 'chipCam', m: 'التقط بالكاميرا صورة لشريحة الإبل (صورة واحدة على الأقل) لمخالفات الرعي (البنود 1–4).' });
   }
   if (s === 3) {
     if (!d.person.trim()) e.push({ f: 'f-person', m: 'أدخل اسم المخالف.' });
@@ -1973,7 +1995,7 @@ function renderReview() {
     ])) +
     sec('المخالفات', 2,
       (d.violationNos.length ? '<ul class="vsum">' + d.violationNos.map(n => '<li><span class="vnum">' + n + '</span><span>' + esc(VBY[n].text) + '</span></li>').join('') + '</ul>' : '<p class="field-error">لم يتم اختيار مخالفات.</p>') +
-      (needsChips() ? '<p style="margin-top:8px"><b>أرقام الشرائح:</b> ' + (d.chips.filter(x => String(x).trim()).map(x => ltr(latinDigits(x).trim())).join('، ') || '<span class="field-error">غير مدخلة</span>') + '</p>' +
+      (needsChips() ? '<p style="margin-top:8px"><b>صور الشرائح:</b> ' + (d.chipPhotos.length ? d.chipPhotos.length + (d.chipPhotos.length === 1 ? ' صورة' : ' صور') : '<span class="field-error">لم تُلتقط</span>') + '</p>' +
         '<p class="hint" style="margin-top:4px">يُرفق كتاب إدارة الثروة الحيوانية عند اعتماد المدير.</p>' : '')) +
     sec('التوقيعات', 3, kvRows([
       ['توقيع المخالف', d.signature === 'signed' ? (d.offenderSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>') : esc(SIGNATURE[d.signature])],
@@ -2254,6 +2276,7 @@ function paperHTML(c) {
     '<h2>المخالفات المضبوطة</h2>' +
     (c.violationNos.length || c.legacyViolations.length ? '<ol>' + c.violationNos.map(n => '<li value="' + n + '">' + esc(VBY[n].text) + '</li>').join('') + c.legacyViolations.map(t => '<li>' + esc(t) + '</li>').join('') + '</ol>' : '<p>—</p>') +
     (c.chips.length ? '<p><b>أرقام شرائح الإبل:</b> ' + c.chips.map(ltr).join('، ') + '</p>' : '') +
+    (c.chipPhotos.length ? '<p><b>صور شرائح الإبل:</b> ' + c.chipPhotos.length + ' (مرفقة)</p>' : '') +
     '<p><b>شرح المخالفة:</b> ' + esc(c.notes || '—') + '</p>' +
     '<h2>بيانات المخالف</h2><table>' +
       (c.offenderType === 'company' ? row('نوع المخالف', OFFENDER_TYPE[c.offenderType]) : '') +
@@ -2396,7 +2419,7 @@ function wpdPage1(c) {
     const pen = v.no === g[0] ? '<td class="pen" rowspan="' + (g[1] - g[0] + 1) + '">' + esc(PENALTIES[v.pen].text) + '</td>' : '';
     return '<tr' + (sel.has(v.no) ? ' class="sel"' : '') + '><td class="n">' + v.no + '.</td><td class="cb"><i' + (sel.has(v.no) ? ' class="on"' : '') + '></i></td><td class="t">' + esc(v.text) + '</td>' + pen + '</tr>';
   }).join('');
-  const notes = [c.notes ? c.notes.trim() : '', c.chips.length ? 'أرقام شرائح الإبل: ' + c.chips.join('، ') : ''].filter(Boolean).join(' — ');
+  const notes = [c.notes ? c.notes.trim() : '', c.chips.length ? 'أرقام شرائح الإبل: ' + c.chips.join('، ') : '', c.chipPhotos.length ? 'مرفق صور شرائح الإبل (' + c.chipPhotos.length + ')' : ''].filter(Boolean).join(' — ');
   const logo = OFFICIAL_LOGO ? '<img src="' + esc(OFFICIAL_LOGO) + '" alt="">' : '';
   const sulh = c.settlement === 'offered'
     ? 'هذا وقد تم عرض الصلح على المخالف في المخالفات التي يجوز فيها الصلح، وأقر المسؤول بمخالفته لأحكام القانون، وطُلب منه مراجعة الإدارة لاستكمال إجراءات الصلح.'
@@ -2475,8 +2498,18 @@ function wpdPages(c) {
     const n = c.livestock.pages.length;
     c.livestock.pages.forEach((pg, i) => pages.push(wpdSheet(c, 'كتاب إدارة الثروة الحيوانية — إفادة حول شريحة الإبل الإلكترونية',
       '<p class="w-lv-meta">' + (c.livestock.reqNo ? 'رقم طلب الإفادة: <span class="ltr">' + esc(c.livestock.reqNo) + '</span> · ' : '') + (c.livestock.date ? 'تاريخ الإفادة: ' + esc(fmtDate(c.livestock.date)) + ' · ' : '') +
-        'أرقام الشرائح: <span class="ltr">' + esc(c.chips.join('، ') || '—') + '</span>' + (n > 1 ? ' · صفحة ' + (i + 1) + ' من ' + n : '') + '</p>' +
+        (c.chips.length ? 'أرقام الشرائح: <span class="ltr">' + esc(c.chips.join('، ')) + '</span>' : 'صور الشرائح مرفقة (' + c.chipPhotos.length + ')') + (n > 1 ? ' · صفحة ' + (i + 1) + ' من ' + n : '') + '</p>' +
       '<div class="w-lv"><img src="' + esc(pg.preview) + '" alt=""></div>', next())));
+  }
+  // camel chip photos (camera): portrait pairs side by side, otherwise stacked
+  for (let i = 0; i < c.chipPhotos.length; i += 2) {
+    const g = c.chipPhotos.slice(i, i + 2);
+    const portrait = g.every(ph => (ph.h || 0) > (ph.w || 0));
+    const cap = ph => '<b>شريحة ' + (c.chipPhotos.indexOf(ph) + 1) + '</b>';
+    const body = portrait && g.length === 2
+      ? '<div class="w-side">' + g.map(ph => wpdFig(ph.preview, cap(ph), 930)).join('') + '</div>'
+      : '<div class="w-ph">' + g.map(ph => wpdFig(ph.preview, cap(ph), 462)).join('') + '</div>';
+    pages.push(wpdSheet(c, 'صور شرائح الإبل', body, next()));
   }
   // supporting evidence: portrait pairs side by side, otherwise stacked
   for (let i = 0; i < support.length; i += 2) {
@@ -2672,12 +2705,13 @@ document.addEventListener('click', e => {
     case 'official-print': printOfficial(t.dataset.id); break;
     case 'zoom': {
       let ph, list;
-      if (t.dataset.case) { const c = getCase(t.dataset.case); list = c ? (t.dataset.kind === 'lv' ? (c.livestock ? c.livestock.pages : []) : t.dataset.kind === 'oc' ? c.officerCard : c.photos) : []; }
+      if (t.dataset.case) { const c = getCase(t.dataset.case); list = c ? (t.dataset.kind === 'lv' ? (c.livestock ? c.livestock.pages : []) : t.dataset.kind === 'oc' ? c.officerCard : t.dataset.kind === 'chip' ? c.chipPhotos : c.photos) : []; }
       else list = W ? W.d.photos : [];
       ph = list.find(p => p.id === t.dataset.id);
       if (ph) {
         const i = list.indexOf(ph) + 1;
         if (t.dataset.kind === 'lv') openViewer(ph.preview, 'كتاب الثروة الحيوانية — صفحة ' + i, '');
+        else if (t.dataset.kind === 'chip') openViewer(ph.preview, 'صورة الشريحة ' + i, '');
         else if (t.dataset.kind === 'oc') openViewer(ph.preview, i === 1 ? 'بطاقة الضبطية — الوجه' : 'بطاقة الضبطية — الظهر', '');
         else openViewer(ph.preview, 'صورة ' + i + ' · ' + PHOTO_CAT[ph.category], ph.caption);
       }
@@ -2748,19 +2782,15 @@ document.addEventListener('click', e => {
       break;
     }
     case 'open-map': openMap(); break;
-    case 'add-chip': {
-      W.d.chips.push('');
-      renderChips();
-      const inputs = $$('#chipList input');
-      inputs[inputs.length - 1].focus();
+    case 'del-chip': {
+      W.d.chipPhotos = W.d.chipPhotos.filter(x => x.id !== t.dataset.id);
+      renderChips(); saveNow(); refreshValidation();
+      $('#chipCam').focus();
       break;
     }
-    case 'del-chip': {
-      W.d.chips.splice(Number(t.dataset.i), 1);
-      if (!W.d.chips.length && needsChips()) W.d.chips = [''];
-      renderChips();
-      scheduleSave();
-      const first = $('#chipList input'); if (first) first.focus();
+    case 'zoom-chip': {
+      const i = W.d.chipPhotos.findIndex(x => x.id === t.dataset.id);
+      if (i >= 0) openViewer(W.d.chipPhotos[i].preview, 'صورة الشريحة ' + (i + 1), '');
       break;
     }
     case 'del-photo': {
@@ -2809,6 +2839,7 @@ document.addEventListener('change', e => {
   if (t.matches('[data-lvr]')) { const k = t.dataset.lvr, v = latinDigits(t.value).trim(); updateCaseLetter(t.dataset.id, lv => { lv[k] = k === 'date' ? t.value : v; }); return; }
   if (!W || !t.closest('#wizard')) return;
   if (t.matches('[data-photo-input]')) { addPhotos(t.files).finally(() => { t.value = ''; }); return; }
+  if (t.matches('[data-chip-input]')) { addChipPhotos(t.files).finally(() => { t.value = ''; }); return; }
   if (t.matches('[data-oc-input]')) { addOfficerCard(t.files).finally(() => { t.value = ''; }); return; }
   if (t.type === 'radio' || t.type === 'checkbox' || t.tagName === 'SELECT') onWizardField(t);
 });
@@ -2817,7 +2848,6 @@ document.addEventListener('keydown', e => {
   // Enter inside a single-line wizard field should not submit anything; move to next field instead
   if (e.key === 'Enter' && W && e.target.matches('#wizard input[type=text], #wizard input[type=tel]')) {
     e.preventDefault();
-    if (e.target.matches('[data-chip]')) { $('[data-action="add-chip"]').click(); return; }
     const fields = $$('#panel' + W.step + ' input:not([type=hidden]):not([readonly]):not([type=radio]):not([type=checkbox]), #panel' + W.step + ' textarea, #panel' + W.step + ' select');
     const i = fields.indexOf(e.target);
     if (fields[i + 1]) fields[i + 1].focus();
