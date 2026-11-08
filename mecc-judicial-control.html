@@ -343,6 +343,19 @@ table.rows{width:100%;border-collapse:collapse;font-size:.92rem}
 .lv-list{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:8px}
 .lv-item{display:flex;align-items:center;gap:12px;padding:8px;border:1px solid var(--line);border-radius:12px;background:#fff}
 .lv-item .pthumb{width:64px;height:80px}
+.owner-row{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.owner-row .pthumb{width:64px;height:80px;flex:none}
+.owner-main{flex:1;min-width:0}
+.owner-main label{font-size:.85rem;margin-bottom:4px}
+.owner-in{display:flex;gap:6px}
+.owner-in input{flex:1;min-width:0}
+.owner-in .btn{flex:none;padding-inline:12px}
+.owner-res{margin-top:8px;padding:8px 10px;border-radius:6px;font-size:.84rem;display:flex;flex-direction:column;gap:2px}
+.owner-res.ok{background:var(--ok-bg);border:1px solid var(--ok-line);color:#123}
+.owner-res.ok b{color:var(--ok)}
+.owner-res.ok em{color:var(--ok);font-style:normal;font-weight:700}
+.owner-res.bad{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn)}
+.owner-res .btn{align-self:flex-start;min-height:36px;padding:4px 10px}
 .lv-item .meta{flex:1;min-width:0;font-size:.8rem;color:var(--muted)}
 .lv-item .meta b{display:block;color:var(--text);font-size:.9rem}
 .chip-row .icon-btn{width:48px;height:48px;border:1px solid var(--bad-line);background:#fff;border-radius:10px}

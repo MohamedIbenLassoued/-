@@ -111,6 +111,10 @@ const MAX_LETTER_PAGES = 2;
 const MAX_CHIP_PHOTOS = 8;
 const STEPS = ['الموقع والزمان والصور', 'المخالفات', 'بيانات المخالف والمراجعة'];
 const STEPS_SHORT = ['الموقع والصور', 'المخالفات', 'المخالف'];
+/* Grazing reports: the inspector does not enter offender data (الإدارة retrieves it from the chip number). */
+const STEPS_GRAZING = ['الموقع والزمان والصور', 'المخالفات', 'المراجعة والتسليم'];
+const STEPS_SHORT_GRAZING = ['الموقع والصور', 'المخالفات', 'التسليم'];
+function stepNames() { return W && needsChips() ? [STEPS_GRAZING, STEPS_SHORT_GRAZING] : [STEPS, STEPS_SHORT]; }
 
 const LEGAL_NOTE = 'العقوبات والإشارات القانونية معروضة للاطلاع فقط. لا يحتسب النظام أي غرامة، ولا يقرر الإدانة، ولا يطبق أي عقوبة؛ القرار القانوني يصدر بعد المراجعة الرسمية من الجهة المختصة.';
 const SIGN_NOTE = 'تسجيل حالة التوقيع إجراء توثيقي فقط، ولا يُعد توقيع المخالف أو رفضه للتوقيع إقراراً بالمخالفة أو نفياً لها.';
@@ -243,6 +247,8 @@ function normalize(raw) {
   c.legacyViolations = (Array.isArray(c.violations) ? c.violations : []).filter(v => typeof v === 'string' && !LEGACY_VIOLATIONS.includes(v) && !VIOLATIONS.some(x => x.text === v));
   c.chips = (Array.isArray(c.chips) ? c.chips : []).map(x => String(x)).filter(x => x.trim()); // legacy typed numbers
   c.chipPhotos = (Array.isArray(c.chipPhotos) ? c.chipPhotos : []).filter(x => x && x.preview);
+  c.chipLookup = c.chipLookup && typeof c.chipLookup === 'object' ? c.chipLookup : {};
+  c.offenderSource = c.offenderSource === 'registry' ? 'registry' : '';
   // كتاب إدارة الثروة الحيوانية (camel chip certificate) — attached for grazing violations
   const lv = c.livestock && typeof c.livestock === 'object' ? c.livestock : null;
   c.livestock = lv ? { reqNo: String(lv.reqNo || ''), date: String(lv.date || ''), pages: (Array.isArray(lv.pages) ? lv.pages : []).filter(x => x && x.preview) } : null;
@@ -764,7 +770,9 @@ function detailSections(c, opts) {
     '<div class="legal-note" style="margin-top:12px">' + icon('info') + '<span>' + LEGAL_NOTE + '</span></div>' +
   '</section>';
 
-  const off = '<section class="card" aria-labelledby="sec-off"><h2 id="sec-off" class="review-sec-head">بيانات المخالف</h2>' + kvRows([
+  const off = '<section class="card" aria-labelledby="sec-off"><h2 id="sec-off" class="review-sec-head">بيانات المخالف</h2>' +
+  (isGrazing(c) && !c.person ? '<p class="hint" style="margin:0 0 8px">مخالفة رعي: تستكمل الإدارة بيانات المخالف من رقم الشريحة.</p>' : '') +
+  (c.offenderSource === 'registry' ? '<p class="hint" style="margin:0 0 8px">البيانات مسترجعة من سجل الثروة الحيوانية عبر رقم الشريحة (محاكاة).</p>' : '') + kvRows([
     c.offenderType === 'company' ? ['نوع المخالف', OFFENDER_TYPE[c.offenderType]] : null,
     [c.offenderType === 'company' ? 'اسم الشركة' : 'اسم المخالف', esc(c.person || '—')],
     [c.offenderType === 'company' ? 'رقم السجل التجاري' : 'رقم البطاقة الشخصية', c.qid ? ltr(c.qid) : '—'],
@@ -1111,7 +1119,8 @@ function wizardHTML(rec) {
   '<section class="panel" id="panel3" aria-labelledby="ph3" hidden>' +
     '<h2 class="sr-only" id="ph3" tabindex="-1">الخطوة 3: بيانات المخالف والمراجعة</h2>' +
     '<div id="err3"></div>' +
-    '<div class="card">' +
+    '<div class="msg info" id="grazeNote" hidden style="margin-bottom:14px">' + icon('info') + '<div><strong>مخالفة رعي: لا يُدخل المفتش بيانات المخالف</strong>تستكمل الإدارة بيانات المخالف من رقم الشريحة الظاهر في صورة الشريحة. يكفي التوقيع ثم التسليم.</div></div>' +
+    '<div class="card" id="offCard">' +
       '<h3 style="margin-bottom:12px">بيانات المخالف</h3>' +
       '<div class="grid2">' +
         '<div class="field"><label for="f-person">اسم المخالف <span class="req">*</span></label><input id="f-person" type="text" data-f="person" value="' + esc(d.person) + '" autocomplete="off"></div>' +
@@ -1126,12 +1135,14 @@ function wizardHTML(rec) {
     '</div>' +
     '<div class="card" id="sigCard">' +
       '<h3 style="margin-bottom:12px">التوقيعات</h3>' +
+      '<div id="offSignWrap">' +
       '<fieldset class="field"><legend>حالة توقيع المخالف</legend><div class="opts">' +
         Object.entries(SIGNATURE).map(([k, v]) => '<label class="opt-card"><input type="radio" name="signature" data-f="signature" value="' + k + '"' + (d.signature === k ? ' checked' : '') + ' aria-describedby="signNote"><span class="radio" aria-hidden="true"></span>' + v + '</label>').join('') +
       '</div><p class="hint" id="signNote">' + SIGN_NOTE + '</p></fieldset>' +
       '<div id="offSigBox"' + (d.signature === 'signed' ? '' : ' hidden') + '>' + sigPadHTML('offenderSig', 'توقيع المخالف', true) + '</div>' +
       '<div id="refusedNote" class="msg warn"' + (d.signature === 'refused' ? '' : ' hidden') + '>' + icon('info') + '<div>سُجّل رفض المخالف للتوقيع. لا حاجة لتوقيع المخالف، ويُكتفى بتوقيع المفتش.</div></div>' +
       '<hr class="divider">' +
+      '</div>' +
       sigPadHTML('inspectorSig', 'توقيع المفتش', true) +
       '<hr class="divider">' +
       '<div class="oc-box">' +
@@ -1163,12 +1174,13 @@ function setStep(n, initial) {
   W.maxStep = Math.max(W.maxStep, n);
   [1, 2, 3].forEach(i => { $('#panel' + i).hidden = i !== n; });
   $('#stepNow').textContent = 'الخطوة ' + n + ' من 3';
-  $('#stepName').textContent = STEPS[n - 1];
+  const [names] = stepNames();
+  $('#stepName').textContent = names[n - 1];
   $$('.step-pills button').forEach((b, i) => {
     if (i + 1 === n) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
     const bad = W.tried && W.errSteps.has(i + 1);
     b.classList.toggle('has-err', bad);
-    b.setAttribute('aria-label', 'الخطوة ' + (i + 1) + ': ' + STEPS[i] + (bad ? ' (بيانات ناقصة)' : ''));
+    b.setAttribute('aria-label', 'الخطوة ' + (i + 1) + ': ' + names[i] + (bad ? ' (بيانات ناقصة)' : ''));
   });
   $('#prevBtn').hidden = n === 1;
   $('#nextBtn').hidden = n === 3;
@@ -1213,8 +1225,8 @@ function serialize(d) {
     chipPhotos: needsChips() ? d.chipPhotos : [],
     notes: d.notes, photos: d.photos,
     offenderType: 'person', person: d.person.trim(), qid: latinDigits(d.qid).trim(), phone: latinDigits(d.phone).trim(),
-    address: d.address, settlement: d.settlement, signature: d.signature,
-    offenderSig: d.signature === 'signed' ? d.offenderSig : '', inspectorSig: d.inspectorSig, officerCard: d.officerCard
+    address: d.address, settlement: d.settlement, signature: needsChips() ? 'unspecified' : d.signature,
+    offenderSig: !needsChips() && d.signature === 'signed' ? d.offenderSig : '', inspectorSig: d.inspectorSig, officerCard: d.officerCard
   };
 }
 function isEmptyDraft(d) {
@@ -1425,7 +1437,20 @@ function updateViolationUI() {
   $('#vCount').textContent = n ? 'تم اختيار ' + n + (n === 1 ? ' مخالفة' : ' مخالفات') : 'لم يتم الاختيار';
   $('#chipBox').hidden = !needsChips();
   placeChipBox();
+  applyGrazingMode();
   $('#vList').removeAttribute('aria-invalid');
+}
+/* Show/hide the inspector's offender section depending on grazing, and rename step 3. */
+function applyGrazingMode() {
+  if (!W || !$('#offCard')) return;
+  const g = needsChips();
+  $('#offCard').hidden = g;
+  $('#offSignWrap').hidden = g;
+  $('#grazeNote').hidden = !g;
+  const [names, short] = stepNames();
+  $$('.step-pills button').forEach((b, i) => { $('.lbl-long', b).textContent = names[i]; $('.lbl-short', b).textContent = short[i]; });
+  if (W.step) $('#stepName').textContent = names[W.step - 1];
+  $('#ph3').textContent = 'الخطوة 3: ' + names[2];
 }
 /* Camel chip numbers appear directly under the ticked grazing violation (1–4):
    the most recently ticked one, or the last ticked grazing item still selected. */
@@ -1802,6 +1827,84 @@ async function addPhotos(fileList) {
   }
 }
 /* Letter pages (كتاب إدارة الثروة الحيوانية): kept larger so the text stays readable. */
+/* Mock Animal Resources registry: returns a clearly fictional owner for a chip number.
+   Stands in for the real lookup service; nothing leaves the device. */
+function mockRegistryLookup(chip) {
+  return new Promise(resolve => setTimeout(() => {
+    const digits = latinDigits(chip).replace(/\D/g, '');
+    if (digits.length < 8) { resolve({ ok: false, reason: 'رقم الشريحة غير مكتمل (8 أرقام على الأقل).' }); return; }
+    let h = 0;
+    for (const ch of digits) h = (h * 31 + Number(ch)) % 100003;
+    if (h % 10 === 7) { resolve({ ok: false, reason: 'لم يُعثر على الشريحة في سجل الثروة الحيوانية.' }); return; }
+    resolve({ ok: true, owner: {
+      name: 'مالك تجريبي ' + digits.slice(-4) + ' (بيانات تجريبية)',
+      qid: '2' + String(h).padStart(5, '0') + digits.slice(-5),
+      phone: '5' + String(h * 7 % 10000000).padStart(7, '0'),
+      area: AREA_SUGGESTIONS[h % AREA_SUGGESTIONS.length]
+    } });
+  }, 700));
+}
+function updateCaseOwner(id, fn) {
+  const cur = getCase(id);
+  if (!cur || !ADMIN_PENDING.includes(cur.status)) { toast('لا يمكن التعديل: تغيرت حالة المحضر.', 'bad'); return false; }
+  const c = clone(cur);
+  fn(c);
+  c.updatedAt = new Date().toISOString();
+  try { upsertCase(c); return true; } catch (e) { toast('تعذر الحفظ محلياً.', 'bad'); return false; }
+}
+function ownerBoxHTML(c) {
+  const id = esc(c.id);
+  const rows = Math.max(c.chipPhotos.length, c.chips.length, 1);
+  let html = '<div class="lv-box owner-box" id="ownerBox">' +
+    '<div class="card-head" style="margin-bottom:4px"><h3>' + icon('user') + ' بيانات المخالف من رقم الشريحة <span class="req">*</span></h3></div>' +
+    '<p class="hint" style="margin:0 0 10px">اقرأ رقم الشريحة من الصورة وأدخله، ثم اضغط «استرجاع» لجلب بيانات المالك من سجل الثروة الحيوانية (محاكاة).</p>';
+  for (let i = 0; i < rows; i++) {
+    const ph = c.chipPhotos[i], no = c.chips[i] || '', res = no ? c.chipLookup[no] : null;
+    html += '<div class="owner-row">' +
+      (ph ? '<button class="pthumb" type="button" data-action="zoom" data-kind="chip" data-case="' + id + '" data-id="' + esc(ph.id) + '" aria-label="تكبير صورة الشريحة ' + (i + 1) + '"><img src="' + esc(ph.thumb || ph.preview) + '" alt=""></button>' : '') +
+      '<div class="owner-main"><label for="chipno' + i + '">رقم الشريحة ' + (i + 1) + '</label>' +
+        '<div class="owner-in"><input id="chipno' + i + '" type="text" class="num-input" inputmode="numeric" data-chipno="' + i + '" data-id="' + id + '" value="' + esc(no) + '" placeholder="مثال: 634097400062064" autocomplete="off" spellcheck="false">' +
+        '<button class="btn secondary" type="button" data-action="lookup-chip" data-i="' + i + '" data-id="' + id + '">استرجاع</button></div>' +
+        (res ? (res.ok
+          ? '<div class="owner-res ok"><b>' + esc(res.owner.name) + '</b><span>الرقم الشخصي: ' + ltr(res.owner.qid) + ' · الهاتف: ' + ltr(res.owner.phone) + ' · ' + esc(res.owner.area) + '</span>' +
+            (c.person === res.owner.name ? '<em>معتمد كمخالف</em>' : '<button class="btn ghost sm" type="button" data-action="use-owner" data-chip="' + esc(no) + '" data-id="' + id + '">اعتماد كمخالف</button>') + '</div>'
+          : '<div class="owner-res bad">' + esc(res.reason) + ' يمكن إدخال البيانات يدوياً أدناه.</div>') : '') +
+      '</div></div>';
+  }
+  html += '<div class="grid2" style="margin-top:10px">' +
+      '<div class="field"><label for="own-person">اسم المخالف <span class="req">*</span></label><input id="own-person" type="text" data-own="person" data-id="' + id + '" value="' + esc(c.person) + '"></div>' +
+      '<div class="field"><label for="own-qid">رقم البطاقة الشخصية</label><input id="own-qid" type="text" class="num-input" inputmode="numeric" data-own="qid" data-id="' + id + '" value="' + esc(c.qid) + '"></div>' +
+      '<div class="field"><label for="own-phone">الهاتف</label><input id="own-phone" type="tel" class="num-input" data-own="phone" data-id="' + id + '" value="' + esc(c.phone) + '"></div>' +
+      '<div class="field"><label for="own-address">العنوان</label><input id="own-address" type="text" data-own="address" data-id="' + id + '" value="' + esc(c.address) + '"></div>' +
+    '</div></div>';
+  return html;
+}
+function refreshOwnerBox(id) {
+  const box = $('#ownerBox'), c = getCase(id);
+  if (!box || !c) return;
+  const note = $('#decNote') ? $('#decNote').value : '';
+  box.outerHTML = ownerBoxHTML(c);
+  if ($('#decNote')) $('#decNote').value = note;
+  const err = $('#decErr'); if (err) err.textContent = '';
+}
+async function lookupChip(id, i, btn) {
+  const input = document.getElementById('chipno' + i);
+  const no = latinDigits(input ? input.value : '').replace(/\s/g, '');
+  if (!no) { input.setAttribute('aria-invalid', 'true'); input.focus(); return; }
+  btn.disabled = true; btn.innerHTML = '<span class="spinner" aria-hidden="true"></span>جارٍ الاسترجاع…';
+  const res = await mockRegistryLookup(no);
+  updateCaseOwner(id, c => {
+    c.chips[i] = no;
+    c.chips = c.chips.filter(Boolean);
+    c.chipLookup[no] = res;
+    if (res.ok && !c.person) { applyOwner(c, res.owner); }
+  });
+  refreshOwnerBox(id);
+}
+function applyOwner(c, o) {
+  c.person = o.name; c.qid = o.qid; c.phone = o.phone; c.address = o.area; c.offenderSource = 'registry';
+}
+
 /* كتاب إدارة الثروة الحيوانية: attached by the director when approving a grazing report. */
 function isGrazing(c) { return c.violationNos.some(n => CHIP_REQUIRED.includes(n)); }
 function updateCaseLetter(id, fn) {
@@ -1937,8 +2040,8 @@ function validateStep(s) {
     if (needsChips() && !d.chipPhotos.length) e.push({ f: 'chipCam', m: 'التقط بالكاميرا صورة لشريحة الإبل (صورة واحدة على الأقل) لمخالفات الرعي (البنود 1–4).' });
   }
   if (s === 3) {
-    if (!d.person.trim()) e.push({ f: 'f-person', m: 'أدخل اسم المخالف.' });
-    if (d.signature === 'signed' && !d.offenderSig) e.push({ f: 'pad-offenderSig', m: 'ارسم توقيع المخالف في المكان المخصص، أو غيّر حالة التوقيع.' });
+    if (!needsChips() && !d.person.trim()) e.push({ f: 'f-person', m: 'أدخل اسم المخالف.' });
+    if (!needsChips() && d.signature === 'signed' && !d.offenderSig) e.push({ f: 'pad-offenderSig', m: 'ارسم توقيع المخالف في المكان المخصص، أو غيّر حالة التوقيع.' });
     if (!d.inspectorSig) e.push({ f: 'pad-inspectorSig', m: 'ارسم توقيع المفتش في المكان المخصص.' });
     if (d.phone.trim() && !/^\+?[0-9][0-9\s-]{5,17}$/.test(latinDigits(d.phone).trim())) e.push({ f: 'f-phone', m: 'رقم الهاتف غير صحيح.' });
   }
@@ -1997,11 +2100,12 @@ function renderReview() {
       (d.violationNos.length ? '<ul class="vsum">' + d.violationNos.map(n => '<li><span class="vnum">' + n + '</span><span>' + esc(VBY[n].text) + '</span></li>').join('') + '</ul>' : '<p class="field-error">لم يتم اختيار مخالفات.</p>') +
       (needsChips() ? '<p style="margin-top:8px"><b>صور الشرائح:</b> ' + (d.chipPhotos.length ? d.chipPhotos.length + (d.chipPhotos.length === 1 ? ' صورة' : ' صور') : '<span class="field-error">لم تُلتقط</span>') + '</p>' +
         '<p class="hint" style="margin-top:4px">يُرفق كتاب إدارة الثروة الحيوانية عند اعتماد المدير.</p>' : '')) +
+    (needsChips() ? sec('بيانات المخالف', 3, '<p class="hint" style="margin:0">تستكملها الإدارة من رقم الشريحة.</p>') : '') +
     sec('التوقيعات', 3, kvRows([
-      ['توقيع المخالف', d.signature === 'signed' ? (d.offenderSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>') : esc(SIGNATURE[d.signature])],
+      needsChips() ? null : ['توقيع المخالف', d.signature === 'signed' ? (d.offenderSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>') : esc(SIGNATURE[d.signature])],
       ['توقيع المفتش', d.inspectorSig ? 'تم التوقيع' : '<span class="field-error">لم يُرسم التوقيع</span>']
     ])) +
-    '<div style="padding-top:12px"><p class="hint">تأكد من صحة بيانات المخالف أعلاه قبل التسليم.</p>' +
+    '<div style="padding-top:12px"><p class="hint">' + (needsChips() ? 'تأكد من صور الشرائح والتوقيع قبل التسليم.' : 'تأكد من صحة بيانات المخالف أعلاه قبل التسليم.') + '</p>' +
     '<button class="btn secondary" type="button" data-action="wiz-preview" style="margin-top:10px">' + icon('eye') + 'معاينة المحضر بصيغة النموذج</button></div>';
 }
 
@@ -2175,6 +2279,7 @@ function renderRoleReview(view, id, role) {
       noteMsg('warn', 'ملاحظة المدير عند الإعادة', c.status === 'director_returned' ? lastAction(c, 'director_returned') : null) +
       (c.status === 'resubmitted' ? '<div class="msg info" style="margin-bottom:12px">' + icon('info') + '<div>أعاد المفتش تسليم هذا المحضر بعد التعديل. راجع ملاحظات الإرجاع السابقة.</div></div>' : '') +
       '<p class="muted" style="margin-bottom:12px">راجع بيانات المحضر والأدلة، ثم حوّله إلى المدير للاعتماد أو أعده للمفتش.</p>' +
+      (isGrazing(c) ? ownerBoxHTML(c) : '') +
       decisionField('ملاحظة المراجعة', 'إلزامية عند الإرجاع للمفتش، واختيارية عند التحويل (تظهر للمدير). تُحفظ ضمن سجل الإجراءات.') +
       '<div class="btn-row"><button class="btn primary lg" type="button" data-action="forward" data-id="' + esc(c.id) + '">' + icon('next') + 'تحويل إلى المدير</button>' +
       '<button class="btn danger-outline lg" type="button" data-action="return" data-id="' + esc(c.id) + '">' + icon('prev') + 'إرجاع للمفتش</button></div>';
@@ -2233,6 +2338,11 @@ async function decide(id, action) {
     noteEl.focus();
     return;
   }
+  if (action === 'forwarded' && isGrazing(cur) && (!cur.chips.length || !cur.person.trim())) {
+    $('#decErr').textContent = 'مخالفة رعي: أدخل رقم الشريحة واسترجع بيانات المخالف (أو أدخلها يدوياً) قبل التحويل إلى المدير.';
+    const box = $('#ownerBox'); if (box) { box.scrollIntoView({ block: 'center' }); const i = $('#chipno0'); if (i) i.focus({ preventScroll: true }); }
+    return;
+  }
   if (action === 'approved' && isGrazing(cur) && !(cur.livestock && cur.livestock.pages.length)) {
     $('#decErr').textContent = 'أرفق كتاب إدارة الثروة الحيوانية قبل اعتماد مخالفة الرعي.';
     const box = $('#lvBox'); if (box) { box.scrollIntoView({ block: 'center' }); const i = $('#lvCam'); if (i) i.focus({ preventScroll: true }); }
@@ -2248,7 +2358,8 @@ async function decide(id, action) {
   c.updatedAt = now;
   if (action === 'approved') { c.reviewedAt = now; c.managerNote = note; }
   if (action === 'returned') { c.reviewedAt = now; c.managerNote = note; c.returnComments.push({ text: note, at: now, by: 'الإدارة' }); }
-  const extra = action === 'approved' && isGrazing(c) && c.livestock && c.livestock.pages.length ? 'أُرفق كتاب إدارة الثروة الحيوانية (' + c.livestock.pages.length + (c.livestock.pages.length === 1 ? ' صفحة' : ' صفحات') + ').' : '';
+  const extra = action === 'forwarded' && isGrazing(c) ? 'بيانات المخالف ' + (c.offenderSource === 'registry' ? 'مسترجعة من سجل الثروة الحيوانية' : 'مدخلة من الإدارة') + ' (الشريحة ' + c.chips.join('، ') + ').' :
+    action === 'approved' && isGrazing(c) && c.livestock && c.livestock.pages.length ? 'أُرفق كتاب إدارة الثروة الحيوانية (' + c.livestock.pages.length + (c.livestock.pages.length === 1 ? ' صفحة' : ' صفحات') + ').' : '';
   c.history.push({ action, at: now, by: T.by + ' — ' + actorName(T.by), note: [note, extra].filter(Boolean).join(' ') });
   try { upsertCase(c); } catch (e) { toast('تعذر حفظ القرار محلياً.', 'bad'); return; }
   toast(T.done);
@@ -2730,6 +2841,12 @@ document.addEventListener('click', e => {
     case 'load-samples': loadSamples(); break;
     case 'remove-samples': removeSamples(); break;
     case 'approve': decide(t.dataset.id, 'approved'); break;
+    case 'lookup-chip': lookupChip(t.dataset.id, Number(t.dataset.i), t); break;
+    case 'use-owner': {
+      const cid = t.dataset.id, no = t.dataset.chip;
+      if (updateCaseOwner(cid, c => { const r = c.chipLookup[no]; if (r && r.ok) applyOwner(c, r.owner); })) refreshOwnerBox(cid);
+      break;
+    }
     case 'del-lv': {
       const cid = t.dataset.case, pid = t.dataset.id;
       askConfirm('حذف صفحة الكتاب؟', '', 'حذف', true).then(yes => {
@@ -2836,6 +2953,8 @@ document.addEventListener('submit', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.matches('[data-lv-input]')) { const files = Array.from(t.files || []); t.value = ''; addLetterPages(t.dataset.id, files); return; }
+  if (t.matches('[data-chipno]')) { const i = Number(t.dataset.chipno), v = latinDigits(t.value).replace(/\s/g, ''); updateCaseOwner(t.dataset.id, c => { c.chips[i] = v; c.chips = c.chips.filter(Boolean); }); return; }
+  if (t.matches('[data-own]')) { const k = t.dataset.own, v = t.value.trim(); updateCaseOwner(t.dataset.id, c => { c[k] = k === 'qid' || k === 'phone' ? latinDigits(v) : v; if (k === 'person') c.offenderSource = ''; }); return; }
   if (t.matches('[data-lvr]')) { const k = t.dataset.lvr, v = latinDigits(t.value).trim(); updateCaseLetter(t.dataset.id, lv => { lv[k] = k === 'date' ? t.value : v; }); return; }
   if (!W || !t.closest('#wizard')) return;
   if (t.matches('[data-photo-input]')) { addPhotos(t.files).finally(() => { t.value = ''; }); return; }
