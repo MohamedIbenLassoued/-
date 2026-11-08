@@ -100,10 +100,9 @@ const SETTLEMENT = { '': 'لم يحدد', offered: 'تم عرض الصلح', not
 const OFFENDER_TYPE = { person: 'شخص', company: 'شركة' };
 const PHOTO_CAT = { field: 'صورة ميدانية', support: 'دليل داعم' };
 const LOC_SOURCE = { gps: 'GPS الجهاز', photo: 'من بيانات الصورة', map: 'تحديد على الخريطة', manual: 'إدخال يدوي', mock: 'محاكاة GPS (تجريبي)' };
-/* Qatar municipalities with an approximate centre (used only to place demo/mock coordinates). */
-const MUNICIPALITIES = [
-  ['الدوحة', 25.2854, 51.5310], ['الريان', 25.2919, 51.4244], ['الوكرة', 25.1659, 51.6038], ['أم صلال', 25.4170, 51.4040],
-  ['الخور والذخيرة', 25.6839, 51.5058], ['الشمال', 26.1300, 51.2000], ['الضعاين', 25.5700, 51.4800], ['الشحانية', 25.3700, 51.2000]
+/* Security centres (المركز الأمني) with an approximate point in their area (used only to place demo/mock coordinates). */
+const SECURITY_CENTERS = [
+  ['إدارة أمن الشمال', 25.9500, 51.3000], ['إدارة أمن دخان', 25.4200, 50.8000], ['إدارة أمن الجنوب', 24.9800, 51.4800]
 ];
 /* Suggestions only; any area name can be typed. */
 const AREA_SUGGESTIONS = ['الغارية', 'الخريب', 'الجميلية', 'أم قرن', 'الكرعانة', 'سيلين', 'أبو سمرة', 'دخان', 'الزبارة', 'الرويس', 'الخويرية',
@@ -250,7 +249,7 @@ function normalize(raw) {
   ['offenderSig', 'inspectorSig'].forEach(k => { c[k] = typeof c[k] === 'string' && c[k].indexOf('data:image/') === 0 ? c[k] : ''; });
   c.officerCard = (Array.isArray(c.officerCard) ? c.officerCard : []).filter(x => x && x.preview).slice(0, 2);
   c.settlement = Object.prototype.hasOwnProperty.call(SETTLEMENT, c.settlement || '') ? (c.settlement || '') : '';
-  ['date', 'time', 'place', 'municipality', 'area', 'notes', 'person', 'qid', 'phone', 'address', 'section', 'inspectorName', 'inspectorNo', 'managerNote'].forEach(k => { c[k] = c[k] == null ? '' : String(c[k]); });
+  ['date', 'time', 'place', 'securityCenter', 'area', 'notes', 'person', 'qid', 'phone', 'address', 'section', 'inspectorName', 'inspectorNo', 'managerNote'].forEach(k => { c[k] = c[k] == null ? '' : String(c[k]); });
   ['lat', 'lng', 'accuracy'].forEach(k => { c[k] = (c[k] === null || c[k] === undefined || c[k] === '') ? null : Number(c[k]); if (Number.isNaN(c[k])) c[k] = null; });
   if (!LOC_SOURCE[c.locSource]) c.locSource = hasCoords(c) ? 'map' : null;
   if (!Array.isArray(c.returnComments)) {
@@ -740,7 +739,7 @@ function detailSections(c, opts) {
     ['المفتش', esc(c.inspectorName || '—') + (c.inspectorNo ? ' · الرقم الوظيفي ' + ltr(c.inspectorNo) : '')],
     ['بطاقة الضبطية', c.officerCard.length ? c.officerCard.map((pg, i) => '<button class="btn ghost sm" type="button" data-action="zoom" data-kind="oc" data-case="' + esc(c.id) + '" data-id="' + esc(pg.id) + '">' + icon('eye') + (i === 0 ? 'الوجه' : 'الظهر') + '</button>').join(' ') : '—'],
     ['القسم', esc(c.section || '—')],
-    ['البلدية', esc(c.municipality || '—')],
+    ['المركز الأمني', esc(c.securityCenter || '—')],
     ['المنطقة', esc(c.area || '—')],
     ['وصف الموقع', esc(c.place || '—')],
     ['الإحداثيات', hasCoords(c) ? ltr(coordsText(c)) + osm : 'غير محددة'],
@@ -897,7 +896,7 @@ const R_FILTERS = [
 function matchQuery(c, q) {
   if (!q) return true;
   q = latinDigits(q).toLowerCase();
-  return [c.id, c.place, c.area, c.municipality, c.person, c.qid, c.section, c.notes].some(v => String(v || '').toLowerCase().includes(q));
+  return [c.id, c.place, c.area, c.securityCenter, c.person, c.qid, c.section, c.notes].some(v => String(v || '').toLowerCase().includes(q));
 }
 function renderReports(view, f) {
   const filt = R_FILTERS.find(x => x[0] === f) || R_FILTERS[0];
@@ -950,7 +949,7 @@ function blankData() {
   const p = getProfile();
   return {
     date: todayISO(), time: nowTime(), inspectorName: p.name || '', inspectorNo: p.no || '',
-    place: '', municipality: '', area: '', lat: null, lng: null, accuracy: null, locSource: null, locAt: null,
+    place: '', securityCenter: '', area: '', lat: null, lng: null, accuracy: null, locSource: null, locAt: null,
     livestock: { reqNo: '', date: '', pages: [] },
     violationNos: [], chips: [], notes: '', photos: [],
     offenderType: 'person', person: '', qid: '', phone: '', address: '', section: '', settlement: '', signature: 'unspecified',
@@ -1061,8 +1060,8 @@ function wizardHTML(rec) {
       '</div>' +
       '<div class="map-box" id="mapBox" hidden><div class="map" id="map" role="application" aria-label="خريطة لتحديد موقع المخالفة"></div><p class="map-hint" id="mapHint">اضغط على الخريطة لوضع علامة موقع المخالفة. موقع الخريطة الافتراضي لا يُعتبر موقعاً محدداً.</p></div>' +
       '<div class="grid2" style="margin-top:14px">' +
-        '<div class="field"><label for="f-muni">البلدية</label><select id="f-muni" data-f="municipality"><option value="">اختر البلدية</option>' +
-          MUNICIPALITIES.map(m => '<option' + (d.municipality === m[0] ? ' selected' : '') + '>' + m[0] + '</option>').join('') + '</select></div>' +
+        '<div class="field"><label for="f-center">المركز الأمني</label><select id="f-center" data-f="securityCenter"><option value="">اختر المركز الأمني</option>' +
+          SECURITY_CENTERS.map(m => '<option' + (d.securityCenter === m[0] ? ' selected' : '') + '>' + m[0] + '</option>').join('') + '</select></div>' +
         '<div class="field"><label for="f-area">المنطقة</label><input id="f-area" type="text" data-f="area" list="areaList" value="' + esc(d.area) + '" placeholder="اختر من القائمة أو اكتب اسم المنطقة" autocomplete="off">' +
           '<datalist id="areaList">' + AREA_SUGGESTIONS.map(a => '<option value="' + a + '"></option>').join('') + '</datalist></div>' +
       '</div>' +
@@ -1199,7 +1198,7 @@ function serialize(d) {
   const okCoords = validLat(lat) && validLng(lng);
   return {
     date: d.date, time: d.time, inspectorName: d.inspectorName.trim(), inspectorNo: latinDigits(d.inspectorNo).trim(),
-    place: d.place, municipality: d.municipality, area: d.area.trim(), lat: okCoords ? lat : null, lng: okCoords ? lng : null,
+    place: d.place, securityCenter: d.securityCenter, area: d.area.trim(), lat: okCoords ? lat : null, lng: okCoords ? lng : null,
     accuracy: okCoords ? d.accuracy : null, locSource: okCoords ? (d.locSource || 'manual') : null, locAt: okCoords ? d.locAt : null,
     section: d.section, violationNos: d.violationNos.slice().sort((a, b) => a - b),
     violations: d.violationNos.slice().sort((a, b) => a - b).map(n => VBY[n].text),
@@ -1211,7 +1210,7 @@ function serialize(d) {
   };
 }
 function isEmptyDraft(d) {
-  return !(d.place.trim() || d.area.trim() || d.municipality || W.raw.lat.trim() || W.raw.lng.trim() || d.violationNos.length || d.notes.trim() || d.photos.length ||
+  return !(d.place.trim() || d.area.trim() || d.securityCenter || W.raw.lat.trim() || W.raw.lng.trim() || d.violationNos.length || d.notes.trim() || d.photos.length ||
     d.person.trim() || d.qid.trim() || d.phone.trim() || d.address.trim() || d.section.trim());
 }
 function saveNow() {
@@ -1498,11 +1497,11 @@ function mockLocate(reason) {
   setTimeout(() => {
     if (W !== wizard) return;
     btn.disabled = false; btn.removeAttribute('aria-busy'); btn.querySelector('span').textContent = 'تحديث موقعي';
-    const m = MUNICIPALITIES.find(x => x[0] === W.d.municipality);
+    const m = SECURITY_CENTERS.find(x => x[0] === W.d.securityCenter);
     const base = m ? [m[1], m[2]] : [25.4495, 51.2234];
     const j = () => (Math.random() - 0.5) * (m ? 0.03 : 0.01);
     setLocation(base[0] + j(), base[1] + j(), 6 + Math.round(Math.random() * 10), 'mock');
-    locMsg('warn', '<strong>موقع تجريبي (محاكاة GPS)</strong>' + esc(reason) + ' وُلِّدت إحداثيات تجريبية' + (m ? ' داخل بلدية ' + esc(m[0]) : '') +
+    locMsg('warn', '<strong>موقع تجريبي (محاكاة GPS)</strong>' + esc(reason) + ' وُلِّدت إحداثيات تجريبية' + (m ? ' ضمن نطاق ' + esc(m[0]) : '') +
       ' لأغراض العرض فقط، وتظهر في المحضر بوصف «محاكاة GPS». للموقع الحقيقي: التقط صورة تحفظ الموقع، أو الصق الإحداثيات من الخرائط.');
   }, 1100);
 }
@@ -1966,7 +1965,8 @@ function renderReview() {
     sec('الموقع والزمان والصور', 1, kvRows([
       ['التاريخ', fmtDate(d.date) + ' · ' + esc(fmtTime12(d.time))],
       ['المفتش', esc(d.inspectorName || '—')],
-      ['المنطقة', esc([d.municipality, d.area].filter(Boolean).join(' — ') || '—')],
+      ['المركز الأمني', esc(d.securityCenter || '—')],
+      ['المنطقة', esc(d.area || '—')],
       ['الموقع', esc(d.place || '—')],
       ['الإحداثيات', c.ok ? ltr(c.lat.toFixed(6) + ', ' + c.lng.toFixed(6)) + (d.accuracy != null ? ' · ±' + d.accuracy + ' م' : '') : 'غير محددة'],
       ['الصور', d.photos.length ? d.photos.length + ' من ' + MAX_PHOTOS + ' (' + d.photos.filter(p => p.category === 'field').length + ' ميدانية، ' + d.photos.filter(p => p.category === 'support').length + ' دليل داعم)' : '<span class="field-error">لا توجد صور</span>']
@@ -2246,7 +2246,8 @@ function paperHTML(c) {
       row('التاريخ / الساعة', fmtDate(c.date) + ' — ' + esc(fmtTime12(c.time))) +
       row('المفتش', esc(c.inspectorName || '—') + (c.inspectorNo ? ' — الرقم الوظيفي: ' + ltr(c.inspectorNo) : '')) +
       row('القسم', esc(c.section || '—')) +
-      row('البلدية / المنطقة', esc([c.municipality, c.area].filter(Boolean).join(' — ') || '—')) +
+      row('المركز الأمني', esc(c.securityCenter || '—')) +
+      row('المنطقة', esc(c.area || '—')) +
       row('وصف الموقع', esc(c.place || '—')) +
       row('الإحداثيات', hasCoords(c) ? ltr('N ' + Number(c.lat).toFixed(6) + '  E ' + Number(c.lng).toFixed(6)) + (c.accuracy != null ? ' (±' + Math.round(c.accuracy) + ' م)' : '') : 'غير محددة') +
     '</table>' +
@@ -2420,7 +2421,7 @@ function wpdPage1(c) {
       '<div class="w-line"><span class="lbl">حرر هذا المحضر بمعرفة المفتش السيد/</span><span class="fill">' + esc(c.inspectorName) + '</span><span class="lbl">وظيفة رقم:</span><span class="fill sh"><span class="ltr">' + esc(c.inspectorNo) + '</span></span></div>' +
       '<div class="w-line"><span class="lbl">حيث وجد أن الشركة/ السيد:</span><span class="fill">' + esc(c.person) + '</span><span class="lbl">جوال رقم :</span><span class="fill sh"><span class="ltr">' + esc(c.phone) + '</span></span></div>' +
       '<div class="w-line"><span class="lbl">بطاقة شخصية رقم:</span>' + wpdBoxes(c.qid, 11) + '</div>' +
-      '<div class="w-line"><span class="lbl">منطقة</span><span class="fill">' + esc(c.area || c.municipality || c.place) + '</span><span class="lbl">الإحداثيات:</span>' +
+      '<div class="w-line"><span class="lbl">منطقة</span><span class="fill">' + esc(c.area || c.place) + '</span><span class="lbl">الإحداثيات:</span>' +
         '<span class="fill sh" style="flex-basis:120px"><span class="ltr">E ' + (hasCoords(c) ? Number(c.lng).toFixed(6) : '') + '</span></span>' +
         '<span class="fill sh" style="flex-basis:120px"><span class="ltr">N ' + (hasCoords(c) ? Number(c.lat).toFixed(6) : '') + '</span></span></div>' +
     '</div>' +
