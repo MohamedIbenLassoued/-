@@ -358,7 +358,7 @@ function renderShell(portal, p) {
     '<a href="#" data-action="logout">' + icon('logout') + '<span>تسجيل الخروج</span></a>' : '';
   const bn = NAV[portal].concat([{ h: '#systems', k: 'systems', label: 'الأنظمة', icon: 'grid' }]);
   const cur0 = NAV[portal].find(it => it.k === key);
-  $('#crumb').innerHTML = '<a href="#systems">نظام الرصد البيئي</a>' + icon('next') + '<span>نظام رصد المخالفات</span>' + icon('next') + '<a href="' + NAV[portal][0].h + '">' + esc(PORTALS[portal].long) + '</a>' +
+  $('#crumb').innerHTML = '<a href="#systems">نظام حماية</a>' + icon('next') + '<span>نظام رصد المخالفات</span>' + icon('next') + '<a href="' + NAV[portal][0].h + '">' + esc(PORTALS[portal].long) + '</a>' +
     (cur0 && cur0 !== NAV[portal][0] ? icon('next') + '<span aria-current="page">' + esc(cur0.label) + '</span>' : '');
   $('#bottomnav').innerHTML = bn.map(it => '<a href="' + it.h + '"' + cur(it) + (it.accent ? ' class="accent"' : '') + (it.action ? ' data-action="' + it.action + '"' : '') + '><span class="bn-icon">' + icon(it.icon) + '</span><span>' + it.label + '</span></a>').join('');
 }
@@ -474,7 +474,7 @@ function renderLogin(view) {
     '<div class="login">' +
       '<section class="id-band login-band">' +
         '<div class="id-org"><span class="brand-mark" aria-hidden="true">MECC</span><span><strong>وزارة البيئة والتغير المناخي</strong><small>دولة قطر · إدارة الحماية البرية</small></span></div>' +
-        '<h1>نظام الرصد البيئي</h1>' +
+        '<h1>نظام حماية</h1>' +
         '<p>رصد المخالفات البيئية والمخلفات البرية ميدانياً، ومتابعة المحاضر حتى اعتمادها.</p>' +
       '</section>' +
       '<div class="login-card">' +
@@ -522,14 +522,14 @@ function submitLogin() {
 }
 
 /* ------------------------------------------------------------------ *
- * نظام الرصد البيئي — system choice after sign-in
+ * نظام حماية — system choice after sign-in
  * ------------------------------------------------------------------ */
 /* رصد المخلفات البرية is a separate, completed system. Put its address here to show an
    "open" button on its page (e.g. 'https://...'); left empty, the page shows its title only. */
 const WASTE_SYSTEM_URL = '';
 function renderSystems(view, user) {
   view.innerHTML =
-    '<section class="id-band hub-band"><p class="id-eyebrow">نظام الرصد البيئي</p><h1>' + greeting() + '، ' + esc(user.name) + '</h1>' +
+    '<section class="id-band hub-band"><p class="id-eyebrow">نظام حماية</p><h1>' + greeting() + '، ' + esc(user.name) + '</h1>' +
       '<p>اختر نوع الرصد للمتابعة.</p></section>' +
     '<div class="sys-grid">' +
       '<a class="sys-card" href="#waste"><span class="sys-ic">' + icon('trash', 'ic-lg') + '</span>' +
@@ -547,7 +547,7 @@ function renderWaste(view) {
   view.innerHTML =
     '<a class="back-link" href="#systems">' + icon('prev') + 'العودة إلى اختيار النظام</a>' +
     '<section class="card sys-page"><span class="sys-ic">' + icon('trash', 'ic-lg') + '</span>' +
-      '<p class="eyebrow">نظام الرصد البيئي</p><h1>رصد المخلفات البرية</h1>' +
+      '<p class="eyebrow">نظام حماية</p><h1>رصد المخلفات البرية</h1>' +
       '<p class="lead">نظام رصد المخلفات البرية نظام مستقل ومكتمل، ولا يتضمن هذا النموذج شاشاته.</p>' +
       (WASTE_SYSTEM_URL ? '<a class="btn primary lg" href="' + esc(WASTE_SYSTEM_URL) + '" target="_blank" rel="noopener">فتح نظام رصد المخلفات' + icon('next') + '</a>' : '') +
     '</section>';
@@ -642,30 +642,30 @@ function render() {
   if (!user) {
     document.body.classList.add('auth');
     if (location.hash !== '#login') history.replaceState(null, '', '#login');
-    document.title = renderLogin(view) + ' | نظام الرصد البيئي';
+    document.title = renderLogin(view) + ' | نظام حماية';
     window.scrollTo(0, 0);
     return;
   }
   document.body.classList.remove('auth');
   const p = parseRoute();
   if (!p.length || p[0] === 'login' || p[0] === 'systems' || p[0] === 'waste') {
-    // نظام الرصد البيئي: choose between رصد المخلفات and رصد المخالفات (نظام رصد المخالفات)
+    // نظام حماية: choose between رصد المخلفات and رصد المخالفات (نظام رصد المخالفات)
     if (p[0] !== 'systems' && p[0] !== 'waste') history.replaceState(null, '', '#systems');
     document.body.classList.add('hub');
     document.body.classList.remove('auth');
-    $('#brandSub').textContent = 'نظام الرصد البيئي';
+    $('#brandSub').textContent = 'نظام حماية';
     $('#portalPill').textContent = user.title;
     $('#portalPill').setAttribute('aria-label', 'المستخدم: ' + user.name + ' — ' + user.title);
     $('#bottomnav').innerHTML = '';
     const t = p[0] === 'waste' ? renderWaste(view) : renderSystems(view, user);
-    document.title = t + ' | نظام الرصد البيئي';
+    document.title = t + ' | نظام حماية';
     window.scrollTo(0, 0);
     const h1 = $('#view h1');
     if (h1 && renderCount++ > 0) { h1.setAttribute('tabindex', '-1'); h1.focus({ preventScroll: true }); }
     return;
   }
   document.body.classList.remove('hub');
-  $('#brandSub').textContent = 'نظام الرصد البيئي · نظام رصد المخالفات';
+  $('#brandSub').textContent = 'نظام حماية · نظام رصد المخالفات';
   const portal = p[0] === 'admin' || p[0] === 'director' ? p[0] : 'inspector';
   // Each signed-in role sees only its own portal.
   if (portal !== user.role || p[0] === 'login') { location.replace(PORTALS[user.role].h); return; }
@@ -684,7 +684,7 @@ function render() {
   else if (p[0] === 'edit' && p[1]) title = renderWizard(view, p[1]);
   else if (p[0] === 'view' && p[1]) title = renderInspectorView(view, p[1]);
   else title = renderHome(view);
-  document.title = (title || 'الرئيسية') + ' | نظام رصد المخالفات | نظام الرصد البيئي';
+  document.title = (title || 'الرئيسية') + ' | نظام رصد المخالفات | نظام حماية';
   window.scrollTo(0, 0);
   const h = $('#view h1');
   if (h && renderCount++ > 0) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
