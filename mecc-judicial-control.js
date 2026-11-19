@@ -1,5 +1,5 @@
 /* =====================================================================
-   MECC Judicial Control — prototype (plain JavaScript, no framework)
+   نظام حماية — inspection reports prototype (plain JavaScript, no framework)
    Inspector + Administration portals in one page, hash routing.
    Data model: localStorage key "mecc_inspection_cases_v1" (unchanged);
    older records are normalised on read and stay compatible.
@@ -279,6 +279,14 @@ function readCases() {
   try { raw = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { raw = []; }
   if (!Array.isArray(raw)) raw = [];
   cache = raw.filter(x => x && typeof x === 'object').map(normalize);
+  // Older reports were numbered MECC-…; renumber them DEMO-… (examples DEMO-EX-…) once.
+  const ids = new Set(cache.map(c => c.id));
+  let renamed = false;
+  cache.forEach(c => {
+    const n = /^MECC-DEMO-/.test(c.id) ? c.id.replace(/^MECC-DEMO-/, 'DEMO-EX-') : /^MECC-/.test(c.id) ? c.id.replace(/^MECC-/, 'DEMO-') : null;
+    if (n && !ids.has(n)) { ids.delete(c.id); ids.add(n); c.id = n; renamed = true; }
+  });
+  if (renamed) { try { localStorage.setItem(KEY, JSON.stringify(cache)); } catch (e) { /* keep in memory */ } }
   return cache;
 }
 function writeCases(list) {
@@ -473,7 +481,7 @@ function renderLogin(view) {
   view.innerHTML =
     '<div class="login">' +
       '<section class="id-band login-band">' +
-        '<div class="id-org"><span class="brand-mark" aria-hidden="true">MECC</span><span><strong>وزارة البيئة والتغير المناخي</strong><small>دولة قطر · إدارة الحماية البرية</small></span></div>' +
+        '<div class="id-org"><span><strong>وزارة البيئة والتغير المناخي</strong><small>دولة قطر · إدارة الحماية البرية</small></span></div>' +
         '<h1>نظام حماية</h1>' +
         '<p>رصد المخالفات البيئية والمخلفات البرية ميدانياً، ومتابعة المحاضر حتى اعتمادها.</p>' +
       '</section>' +
