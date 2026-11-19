@@ -227,7 +227,7 @@ let cache = null;
 
 function normalize(raw) {
   const c = Object.assign({}, raw);
-  c.id = String(c.id || uid('MECC-LEGACY-'));
+  c.id = String(c.id || uid('DEMO-LEGACY-'));
   if (!STATUS[c.status]) c.status = 'submitted';
   // photos: legacy = array of data-URL strings
   c.photos = (Array.isArray(c.photos) ? c.photos : []).map((p, i) => {
@@ -296,7 +296,7 @@ function upsertCase(c) {
 function removeCase(id) { writeCases(readCases().filter(c => c.id !== id)); }
 function newId() {
   const ids = new Set(readCases().map(c => c.id));
-  const base = 'MECC-' + new Date().getFullYear() + '-';
+  const base = 'DEMO-' + new Date().getFullYear() + '-';
   let n = Number(String(Date.now()).slice(-7));
   while (ids.has(base + String(n).padStart(7, '0'))) n = (n + 1) % 10000000;
   return base + String(n).padStart(7, '0');
@@ -818,23 +818,23 @@ function sampleCases() {
   const day = n => { const x = d(n); return x.getFullYear() + '-' + pad(x.getMonth() + 1) + '-' + pad(x.getDate()); };
   const base = { offenderType: 'person', phone: '', address: '', settlement: '', signature: 'unspecified', photos: [], inspectorName: 'مفتش تجريبي', inspectorNo: '000000', section: 'الشمال' };
   return [
-    Object.assign({}, base, { id: 'MECC-DEMO-0000001', status: 'returned', date: day(3), time: '07:35', place: 'مثال: منطقة الخريب – روضة طبيعية', lat: 25.4495, lng: 51.2234, accuracy: 9, locSource: 'gps',
+    Object.assign({}, base, { id: 'DEMO-EX-0000001', status: 'returned', date: day(3), time: '07:35', place: 'مثال: منطقة الخريب – روضة طبيعية', lat: 25.4495, lng: 51.2234, accuracy: 9, locSource: 'gps',
       violationNos: [1], chips: ['000000000000001'], notes: 'مثال تجريبي: رعي قطيع إبل داخل منطقة بيئة نباتية محمية.', person: 'مخالف تجريبي (مثال)', qid: '00000000000', signature: 'refused',
       createdAt: iso(3, 7), updatedAt: iso(1, 10), submittedAt: iso(3, 9), reviewedAt: iso(1, 10), managerNote: 'يرجى إرفاق صورة لقارئ الشريحة الإلكترونية وتوضيح حدود المنطقة المحمية.',
       returnComments: [{ text: 'يرجى إرفاق صورة لقارئ الشريحة الإلكترونية وتوضيح حدود المنطقة المحمية.', at: iso(1, 10), by: 'الإدارة' }],
       history: [{ action: 'created', at: iso(3, 7), by: 'مفتش تجريبي' }, { action: 'submitted', at: iso(3, 9), by: 'مفتش تجريبي' }, { action: 'returned', at: iso(1, 10), by: 'الإدارة', note: 'يرجى إرفاق صورة لقارئ الشريحة الإلكترونية وتوضيح حدود المنطقة المحمية.' }] }),
-    Object.assign({}, base, { id: 'MECC-DEMO-0000002', status: 'submitted', date: day(1), time: '16:20', place: 'مثال: محيط روضة شمال الدوحة', lat: 25.62, lng: 51.41, accuracy: 15, locSource: 'gps',
+    Object.assign({}, base, { id: 'DEMO-EX-0000002', status: 'submitted', date: day(1), time: '16:20', place: 'مثال: محيط روضة شمال الدوحة', lat: 25.62, lng: 51.41, accuracy: 15, locSource: 'gps',
       violationNos: [10, 14], notes: 'مثال تجريبي: إشعال نار ومرور مركبة خارج المسار.', person: 'مخالف تجريبي ثالث (مثال)', qid: '00000000002', settlement: 'offered', signature: 'signed',
       createdAt: iso(1, 16), updatedAt: iso(1, 17), submittedAt: iso(1, 17),
       returnComments: [], history: [{ action: 'created', at: iso(1, 16), by: 'مفتش تجريبي' }, { action: 'submitted', at: iso(1, 17), by: 'مفتش تجريبي' }] }),
-    Object.assign({}, base, { id: 'MECC-DEMO-0000003', status: 'draft', date: day(0), time: '08:05', place: 'مثال: ساحل الغارية', lat: null, lng: null,
+    Object.assign({}, base, { id: 'DEMO-EX-0000003', status: 'draft', date: day(0), time: '08:05', place: 'مثال: ساحل الغارية', lat: null, lng: null,
       violationNos: [17], notes: '', person: '', createdAt: iso(0, 8), updatedAt: iso(0, 8),
       returnComments: [], history: [{ action: 'created', at: iso(0, 8), by: 'مفتش تجريبي' }] }),
-    Object.assign({}, base, { id: 'MECC-DEMO-0000004', status: 'approved', date: day(6), time: '10:40', place: 'مثال: مزرعة جنوب الخور', lat: 25.6, lng: 51.48, accuracy: 20, locSource: 'map',
+    Object.assign({}, base, { id: 'DEMO-EX-0000004', status: 'approved', date: day(6), time: '10:40', place: 'مثال: مزرعة جنوب الخور', lat: 25.6, lng: 51.48, accuracy: 20, locSource: 'map',
       violationNos: [15], notes: 'مثال تجريبي: نقل أتربة من أرض زراعية.', person: 'مخالف تجريبي آخر (مثال)', qid: '00000000001',
       createdAt: iso(6, 10), updatedAt: iso(4, 12), submittedAt: iso(6, 12), reviewedAt: iso(4, 12), managerNote: 'تمت المراجعة.',
       returnComments: [], history: [{ action: 'created', at: iso(6, 10), by: 'مفتش تجريبي' }, { action: 'submitted', at: iso(6, 12), by: 'مفتش تجريبي' }, { action: 'forwarded', at: iso(5, 9), by: 'الإدارة', note: 'تمت المراجعة.' }, { action: 'approved', at: iso(4, 12), by: 'المدير', note: '' }] }),
-    Object.assign({}, base, { id: 'MECC-DEMO-0000005', status: 'forwarded', date: day(2), time: '09:10', place: 'مثال: روضة جنوب الشمال', lat: 25.7, lng: 51.3, accuracy: 11, locSource: 'gps',
+    Object.assign({}, base, { id: 'DEMO-EX-0000005', status: 'forwarded', date: day(2), time: '09:10', place: 'مثال: روضة جنوب الشمال', lat: 25.7, lng: 51.3, accuracy: 11, locSource: 'gps',
       violationNos: [6], notes: 'مثال تجريبي: قطع أشجار برية بدون ترخيص.', person: 'مخالف تجريبي رابع (مثال)', qid: '00000000003',
       createdAt: iso(2, 9), updatedAt: iso(1, 11), submittedAt: iso(2, 10),
       returnComments: [], history: [{ action: 'created', at: iso(2, 9), by: 'مفتش تجريبي' }, { action: 'submitted', at: iso(2, 10), by: 'مفتش تجريبي' }, { action: 'forwarded', at: iso(1, 11), by: 'الإدارة', note: 'البيانات مكتملة، مرفوع للاعتماد.' }] })
@@ -850,13 +850,13 @@ function loadSamples() {
   render();
 }
 function removeSamples() {
-  try { writeCases(readCases().filter(c => !/^MECC-DEMO-/.test(c.id))); toast('تم حذف المحاضر التجريبية.'); } catch (e) { toast('تعذر الحذف.', 'bad'); }
+  try { writeCases(readCases().filter(c => !/^(MECC-DEMO|DEMO-EX)-/.test(c.id))); toast('تم حذف المحاضر التجريبية.'); } catch (e) { toast('تعذر الحذف.', 'bad'); }
   render();
 }
 const sampleBtn = () => '<button class="btn secondary" type="button" data-action="load-samples">' + icon('list') + 'تحميل محاضر تجريبية</button>';
 function samplesNote() {
-  return readCases().some(c => /^MECC-DEMO-/.test(c.id))
-    ? '<div class="msg info" style="margin-top:14px">' + icon('info') + '<div>المحاضر التي يبدأ رقمها بـ <bdi dir="ltr">MECC-DEMO</bdi> أمثلة تجريبية للعرض فقط. <button class="btn ghost sm" type="button" data-action="remove-samples">حذف الأمثلة</button></div></div>' : '';
+  return readCases().some(c => /^(MECC-DEMO|DEMO-EX)-/.test(c.id))
+    ? '<div class="msg info" style="margin-top:14px">' + icon('info') + '<div>المحاضر التي يبدأ رقمها بـ <bdi dir="ltr">DEMO-EX</bdi> أمثلة تجريبية للعرض فقط. <button class="btn ghost sm" type="button" data-action="remove-samples">حذف الأمثلة</button></div></div>' : '';
 }
 
 /* ------------------------------------------------------------------ *
@@ -2871,7 +2871,7 @@ document.addEventListener('click', e => {
     case 'submit': submitWizard(); break;
     case 'wiz-preview': {
       const base = W.id ? getCase(W.id) : null;
-      openPreview(normalize(Object.assign({ id: W.id || 'MECC-DRAFT', status: W.status || 'draft', createdAt: new Date().toISOString() },
+      openPreview(normalize(Object.assign({ id: W.id || 'DEMO-DRAFT', status: W.status || 'draft', createdAt: new Date().toISOString() },
         base ? { history: base.history, returnComments: base.returnComments } : { history: [], returnComments: [] }, serialize(W.d))));
       break;
     }
